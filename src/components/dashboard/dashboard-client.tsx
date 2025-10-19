@@ -5,7 +5,7 @@ import { BarChart, Bot, BrainCircuit, Coins, DollarSign, Zap, FileText, ChevronR
 import { MetricCard } from './metric-card';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useAuth } from '@/hooks/use-toast';
+import { useAuth } from '@/lib/hooks';
 import { db } from '@/lib/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { BusinessProfile, DashboardMetrics } from '@/lib/types';
