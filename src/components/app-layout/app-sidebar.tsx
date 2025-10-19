@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/use-toast';
+import { useAuth } from '@/lib/hooks';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';

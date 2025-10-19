@@ -1,6 +1,6 @@
 'use client';
 
-import { useAuth } from '@/hooks/use-toast';
+import { useAuth } from '@/lib/hooks';
 import { db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { useRouter, usePathname } from 'next/navigation';
