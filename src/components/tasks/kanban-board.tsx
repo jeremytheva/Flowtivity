@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/hooks/use-toast';
+import { useAuth } from '@/lib/hooks';
 import { db } from '@/lib/firebase';
 import { collection, onSnapshot, query, orderBy, doc, updateDoc } from 'firebase/firestore';
 import { Task, TaskStatus, taskStatuses, statusLabels } from '@/lib/types';
