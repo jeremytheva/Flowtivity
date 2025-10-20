@@ -5,9 +5,8 @@ import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
-import { doc, setDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { useAuth } from '@/hooks/use-toast';
+import { doc, setDoc, updateDoc } from 'firebase/firestore';
+import { useFirestore, useUser } from '@/firebase';
 
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -41,7 +40,8 @@ export function OnboardingWizard() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const { user } = useAuth();
+  const { user } = useUser();
+  const firestore = useFirestore();
   const { toast } = useToast();
 
   const methods = useForm<z.infer<typeof formSchema>>({
@@ -64,9 +64,14 @@ export function OnboardingWizard() {
     }
     setLoading(true);
     try {
-      await setDoc(doc(db, 'users', user.uid, 'businessProfile', 'data'), data);
+      const userDocRef = doc(firestore, 'users', user.uid);
+      await updateDoc(userDocRef, {
+        ...data,
+        onboardingComplete: true
+      });
+
       // Also create a default metrics doc
-      await setDoc(doc(db, 'users', user.uid, 'metrics', 'data'), {
+      await setDoc(doc(firestore, 'users', user.uid, 'metrics', 'data'), {
         leadCount: 120,
         engagementRate: 45,
         conversionRate: 3.2,

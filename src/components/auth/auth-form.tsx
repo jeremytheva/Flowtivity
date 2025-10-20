@@ -11,8 +11,9 @@ import {
   signInWithPopup,
   updateProfile,
 } from 'firebase/auth';
-import { auth, db, googleProvider } from '@/lib/firebase';
+import { useAuth, useFirestore } from '@/firebase';
 import { doc, setDoc } from 'firebase/firestore';
+import { GoogleAuthProvider } from 'firebase/auth';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -50,6 +51,9 @@ export function AuthForm({ mode }: AuthFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const auth = useAuth();
+  const firestore = useFirestore();
+  const googleProvider = new GoogleAuthProvider();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -69,11 +73,11 @@ export function AuthForm({ mode }: AuthFormProps) {
         if (values.name) {
           await updateProfile(userCredential.user, { displayName: values.name });
         }
-        await setDoc(doc(db, 'users', userCredential.user.uid), {
+        await setDoc(doc(firestore, 'users', userCredential.user.uid), {
           uid: userCredential.user.uid,
           email: userCredential.user.email,
-          name: values.name || '',
-          createdAt: new Date(),
+          displayName: values.name || '',
+          onboardingComplete: false,
         });
       } else {
         await signInWithEmailAndPassword(auth, values.email, values.password);
@@ -92,11 +96,11 @@ export function AuthForm({ mode }: AuthFormProps) {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
-      await setDoc(doc(db, 'users', user.uid), {
+      await setDoc(doc(firestore, 'users', user.uid), {
           uid: user.uid,
           email: user.email,
-          name: user.displayName,
-          createdAt: new Date(),
+          displayName: user.displayName,
+          onboardingComplete: false, // Assume new user or re-check
       }, { merge: true });
       router.push('/dashboard');
     } catch (err: any) {

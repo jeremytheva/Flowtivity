@@ -19,6 +19,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2 } from 'lucide-react';
+import { useUser } from '@/firebase';
 
 const taskSchema = z.object({
   title: z.string().min(1, 'Title is required.'),
@@ -33,6 +34,7 @@ type CreateTaskDialogProps = {
 export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const { user } = useUser();
   
   const form = useForm<z.infer<typeof taskSchema>>({
     resolver: zodResolver(taskSchema),
@@ -47,8 +49,12 @@ export function CreateTaskDialog({ open, onOpenChange }: CreateTaskDialogProps) 
   };
 
   const onSubmit = async (data: z.infer<typeof taskSchema>) => {
+    if(!user) {
+      toast({ title: 'Error', description: 'You must be logged in to create a task.', variant: 'destructive' });
+      return;
+    }
     setLoading(true);
-    const result = await addTaskAction({ ...data, status: 'todo' });
+    const result = await addTaskAction({ ...data, status: 'todo' }, user.uid);
     if (result.success) {
       toast({ title: 'Task created successfully!' });
       handleOpenChange(false);

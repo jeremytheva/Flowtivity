@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useAuth } from '@/lib/hooks';
-import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query, orderBy, doc, updateDoc } from 'firebase/firestore';
+import { useState, useEffect, useMemo } from 'react';
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, query, orderBy, doc, updateDoc } from 'firebase/firestore';
 import { Task, TaskStatus, taskStatuses, statusLabels } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,38 +11,25 @@ import { CreateTaskDialog } from './create-task-dialog';
 import { KanbanCard } from './kanban-card';
 
 export function KanbanBoard() {
-  const { user } = useAuth();
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user } = useUser();
+  const firestore = useFirestore();
   const [isCreateDialogOpen, setCreateDialogOpen] = useState(false);
 
-  useEffect(() => {
-    if (!user) {
-        setLoading(false);
-        return;
-    };
+  const tasksQuery = useMemoFirebase(() => {
+    if (!user) return null;
+    return query(collection(firestore, 'users', user.uid, 'tasks'), orderBy('createdAt', 'desc'));
+  }, [firestore, user]);
 
-    const q = query(collection(db, 'users', user.uid, 'tasks'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const tasksData: Task[] = [];
-      querySnapshot.forEach((doc) => {
-        tasksData.push({ id: doc.id, ...doc.data() } as Task);
-      });
-      setTasks(tasksData);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
+  const { data: tasks, isLoading: loading } = useCollection<Task>(tasksQuery);
 
   const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
     if (!user) return;
-    const taskRef = doc(db, 'users', user.uid, 'tasks', taskId);
+    const taskRef = doc(firestore, 'users', user.uid, 'tasks', taskId);
     await updateDoc(taskRef, { status: newStatus });
   };
 
   const tasksByStatus = (status: TaskStatus) => {
-    return tasks.filter((task) => task.status === status);
+    return tasks?.filter((task) => task.status === status) || [];
   };
 
   return (
@@ -60,7 +46,7 @@ export function KanbanBoard() {
             </div>
         ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {taskStatuses.map((status) => (
+            {(taskStatuses || []).map((status) => (
                 <Card key={status} className="bg-muted/50">
                     <CardHeader>
                         <CardTitle className="font-headline text-lg flex items-center justify-between">

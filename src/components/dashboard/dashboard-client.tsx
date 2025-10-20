@@ -5,8 +5,7 @@ import { BarChart, Bot, BrainCircuit, Coins, DollarSign, Zap, FileText, ChevronR
 import { MetricCard } from './metric-card';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useAuth } from '@/lib/hooks';
-import { db } from '@/lib/firebase';
+import { useUser, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { BusinessProfile, DashboardMetrics } from '@/lib/types';
 import {
@@ -21,7 +20,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 
 export function DashboardClient() {
-  const { user } = useAuth();
+  const { user } = useUser();
+  const firestore = useFirestore();
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -34,30 +34,32 @@ export function DashboardClient() {
   
   const { toast } = useToast();
 
+  const metricsDocRef = useMemoFirebase(() => {
+    if (!user) return null;
+    return doc(firestore, 'users', user.uid, 'metrics', 'data');
+  }, [firestore, user]);
+  const { data: metricsData, isLoading: metricsLoading } = useDoc<DashboardMetrics>(metricsDocRef);
+
+  const profileDocRef = useMemoFirebase(() => {
+    if (!user) return null;
+    return doc(firestore, 'users', user.uid, 'businessProfile', 'data');
+  }, [firestore, user]);
+  const { data: profileData, isLoading: profileLoading } = useDoc<BusinessProfile>(profileDocRef);
+
+
   useEffect(() => {
-    if (!user) return;
-    
-    setLoading(true);
-    const metricsUnsub = onSnapshot(doc(db, 'users', user.uid, 'metrics', 'data'), (doc) => {
-        if (doc.exists()) {
-            setMetrics(doc.data() as DashboardMetrics);
-        } else {
-            setMetrics({ leadCount: 120, engagementRate: 45, conversionRate: 3.2 });
-        }
-    });
+    if (!metricsLoading) {
+        setMetrics(metricsData || { leadCount: 120, engagementRate: 45, conversionRate: 3.2 });
+    }
+  }, [metricsData, metricsLoading]);
 
-    const profileUnsub = onSnapshot(doc(db, 'users', user.uid, 'businessProfile', 'data'), (doc) => {
-        if (doc.exists()) {
-            setProfile(doc.data() as BusinessProfile);
-        }
-        setLoading(false);
-    });
+  useEffect(() => {
+      if (!profileLoading) {
+          setProfile(profileData);
+          setLoading(profileLoading);
+      }
+  }, [profileData, profileLoading]);
 
-    return () => {
-      metricsUnsub();
-      profileUnsub();
-    };
-  }, [user]);
 
   const handleAiAction = async (action: 'coach' | 'audit' | 'tech' | 'workflow') => {
     setIsAiRunning(action);
@@ -152,7 +154,7 @@ export function DashboardClient() {
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-headline tracking-tight">Dashboard</h1>
-        <p className="text-muted-foreground mt-2">Welcome back, {user?.name || 'Strategist'}. Here's your business overview.</p>
+        <p className="text-muted-foreground mt-2">Welcome back, {user?.displayName || 'Strategist'}. Here's your business overview.</p>
       </div>
       
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

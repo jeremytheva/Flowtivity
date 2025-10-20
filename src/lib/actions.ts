@@ -3,10 +3,10 @@
 import { getAICoachAdvice } from '@/ai/flows/get-ai-coach-advice';
 import { runFinancialAudit } from '@/ai/flows/run-financial-audit';
 import { generateInitialTechStackRecommendations } from '@/ai/flows/generate-initial-tech-stack-recommendations';
-import { auth } from '@/lib/firebase';
+import { getAuth } from 'firebase/auth';
 import { revalidatePath } from 'next/cache';
+import { initializeFirebase } from '@/firebase';
 
-import { db } from './firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 export async function getCoachAdviceAction(
@@ -54,14 +54,14 @@ export async function deployWorkflowAction() {
   return { success: true, message: 'Workflow deployment initiated successfully!' };
 }
 
-export async function addTaskAction(task: { title: string; description?: string; status: 'todo' | 'inprogress' | 'done' }) {
-    const user = auth.currentUser;
-    if (!user) {
+export async function addTaskAction(task: { title: string; description?: string; status: 'todo' | 'inprogress' | 'done' }, userId: string) {
+    const { firestore } = initializeFirebase();
+    if (!userId) {
         return { success: false, error: 'You must be logged in to add a task.' };
     }
     
     try {
-        const tasksCollectionRef = collection(db, 'users', user.uid, 'tasks');
+        const tasksCollectionRef = collection(firestore, 'users', userId, 'tasks');
         await addDoc(tasksCollectionRef, {
             ...task,
             createdAt: serverTimestamp(),

@@ -1,14 +1,14 @@
 'use client';
 
-import { useAuth } from '@/lib/hooks';
-import { db } from '@/lib/firebase';
+import { useUser, useFirestore } from '@/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState, ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
 
 export function OnboardingCheck({ children }: { children: ReactNode }) {
-  const { user, loading: authLoading } = useAuth();
+  const { user, isUserLoading: authLoading } = useUser();
+  const firestore = useFirestore();
   const router = useRouter();
   const pathname = usePathname();
   const [profileChecked, setProfileChecked] = useState(false);
@@ -28,10 +28,10 @@ export function OnboardingCheck({ children }: { children: ReactNode }) {
     }
 
     const checkProfile = async () => {
-      const businessProfileRef = doc(db, 'users', user.uid, 'businessProfile', 'data');
+      const businessProfileRef = doc(firestore, 'users', user.uid);
       const businessProfileSnap = await getDoc(businessProfileRef);
       
-      if (!businessProfileSnap.exists()) {
+      if (!businessProfileSnap.exists() || !businessProfileSnap.data()?.onboardingComplete) {
         router.replace('/onboarding');
       } else {
         setProfileChecked(true);
@@ -39,7 +39,7 @@ export function OnboardingCheck({ children }: { children: ReactNode }) {
     };
 
     checkProfile();
-  }, [user, authLoading, router, pathname]);
+  }, [user, authLoading, router, pathname, firestore]);
 
   if (!profileChecked || authLoading) {
     return (

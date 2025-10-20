@@ -18,16 +18,17 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/hooks';
+import { useUser, useAuth } from '@/firebase';
 import { signOut } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
 
 export function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user } = useUser();
+  const auth = useAuth();
+
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -82,12 +83,12 @@ export function AppSidebar() {
         <div className="flex w-full items-center gap-2 p-2 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0">
           {user && (
             <Avatar className="h-8 w-8">
-              <AvatarImage src={user.photoURL || undefined} alt={user.name || undefined} />
-              <AvatarFallback>{getInitials(user.name)}</AvatarFallback>
+              <AvatarImage src={user.photoURL || undefined} alt={user.displayName || undefined} />
+              <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
             </Avatar>
           )}
           <div className="flex-1 overflow-hidden group-data-[collapsible=icon]:hidden">
-            <p className="truncate text-sm font-medium">{user?.name}</p>
+            <p className="truncate text-sm font-medium">{user?.displayName}</p>
             <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
           </div>
           <Button variant="ghost" size="icon" className="h-8 w-8 group-data-[collapsible=icon]:hidden" onClick={handleLogout}>

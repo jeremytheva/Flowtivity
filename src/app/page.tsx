@@ -1,17 +1,17 @@
 'use client';
 
-import { useAuth } from '@/lib/hooks';
+import { useUser } from '@/firebase';
 import { useRouter, usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 
 export default function Home() {
-  const { user, loading } = useAuth();
+  const { user, isUserLoading } = useUser();
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!loading) {
+    if (!isUserLoading) {
       if (user) {
         // If user is on the root page, redirect to dashboard.
         // Otherwise, let them stay (e.g., if they are already navigating within the app).
@@ -22,7 +22,7 @@ export default function Home() {
         router.replace('/login');
       }
     }
-  }, [user, loading, router, pathname]);
+  }, [user, isUserLoading, router, pathname]);
 
   return (
     <div className="flex h-screen w-full items-center justify-center bg-background">
