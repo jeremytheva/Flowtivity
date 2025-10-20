@@ -1,0 +1,284 @@
+{
+  "entities": {
+    "UserProfile": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "UserProfile",
+      "type": "object",
+      "description": "Represents a user's profile within the SoloStrategist OS.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the user profile."
+        },
+        "email": {
+          "type": "string",
+          "description": "User's email address.",
+          "format": "email"
+        },
+        "businessName": {
+          "type": "string",
+          "description": "Name of the user's business."
+        },
+        "onboardingComplete": {
+          "type": "boolean",
+          "description": "Indicates whether the user has completed the onboarding process."
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "businessName",
+        "onboardingComplete"
+      ]
+    },
+    "Task": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Task",
+      "type": "object",
+      "description": "Represents a task within the Kanban task board.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the task."
+        },
+        "userProfileId": {
+          "type": "string",
+          "description": "Reference to UserProfile. (Relationship: UserProfile 1:N Task)"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the task."
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed description of the task."
+        },
+        "status": {
+          "type": "string",
+          "description": "Current status of the task (e.g., 'To Do', 'In Progress', 'Done')."
+        }
+      },
+      "required": [
+        "id",
+        "userProfileId",
+        "title",
+        "description",
+        "status"
+      ]
+    },
+    "MetricsData": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "MetricsData",
+      "type": "object",
+      "description": "Represents aggregated metrics data for a user's business.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the metrics data."
+        },
+        "userProfileId": {
+          "type": "string",
+          "description": "Reference to UserProfile. (Relationship: UserProfile 1:N MetricsData)"
+        },
+        "leadCount": {
+          "type": "number",
+          "description": "Number of leads generated."
+        },
+        "engagementRate": {
+          "type": "number",
+          "description": "Engagement rate of users."
+        },
+        "conversionRate": {
+          "type": "number",
+          "description": "Conversion rate of leads to customers."
+        }
+      },
+      "required": [
+        "id",
+        "userProfileId",
+        "leadCount",
+        "engagementRate",
+        "conversionRate"
+      ]
+    },
+    "CoachingHistory": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "CoachingHistory",
+      "type": "object",
+      "description": "Represents the history of AI coaching advice given to a user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the coaching history entry."
+        },
+        "userProfileId": {
+          "type": "string",
+          "description": "Reference to UserProfile. (Relationship: UserProfile 1:N CoachingHistory)"
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Timestamp of when the advice was given.",
+          "format": "date-time"
+        },
+        "advice": {
+          "type": "string",
+          "description": "The AI-generated business advice."
+        },
+        "completionStatus": {
+          "type": "string",
+          "description": "Status of the completion of the advice (e.g., 'Completed', 'In Progress', 'Not Started')."
+        }
+      },
+      "required": [
+        "id",
+        "userProfileId",
+        "timestamp",
+        "advice",
+        "completionStatus"
+      ]
+    },
+    "ToolUsageLog": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ToolUsageLog",
+      "type": "object",
+      "description": "Logs the usage of various tools and subscriptions by the user to detect potential money leaks.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the tool usage log entry."
+        },
+        "userProfileId": {
+          "type": "string",
+          "description": "Reference to UserProfile. (Relationship: UserProfile 1:N ToolUsageLog)"
+        },
+        "toolName": {
+          "type": "string",
+          "description": "Name of the tool or subscription used."
+        },
+        "lastUsed": {
+          "type": "string",
+          "description": "Date and time the tool was last used.",
+          "format": "date-time"
+        },
+        "monthlyCost": {
+          "type": "number",
+          "description": "Monthly cost of the tool or subscription."
+        }
+      },
+      "required": [
+        "id",
+        "userProfileId",
+        "toolName",
+        "lastUsed",
+        "monthlyCost"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/userProfiles/{userProfileId}",
+        "definition": {
+          "entityName": "UserProfile",
+          "schema": {
+            "$ref": "#/backend/entities/UserProfile"
+          },
+          "description": "Stores user profile information. Each document represents a single user's profile.",
+          "params": [
+            {
+              "name": "userProfileId",
+              "description": "The unique identifier for the user profile."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/userProfiles/{userProfileId}/tasks/{taskId}",
+        "definition": {
+          "entityName": "Task",
+          "schema": {
+            "$ref": "#/backend/entities/Task"
+          },
+          "description": "Stores tasks associated with a specific user profile. Each document represents a task. Path-based ownership.",
+          "params": [
+            {
+              "name": "userProfileId",
+              "description": "The unique identifier for the user profile."
+            },
+            {
+              "name": "taskId",
+              "description": "The unique identifier for the task."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/userProfiles/{userProfileId}/metricsData/{metricsDataId}",
+        "definition": {
+          "entityName": "MetricsData",
+          "schema": {
+            "$ref": "#/backend/entities/MetricsData"
+          },
+          "description": "Stores metrics data associated with a specific user profile. Each document represents metrics data. Path-based ownership.",
+          "params": [
+            {
+              "name": "userProfileId",
+              "description": "The unique identifier for the user profile."
+            },
+            {
+              "name": "metricsDataId",
+              "description": "The unique identifier for the metrics data."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/userProfiles/{userProfileId}/coachingHistory/{coachingHistoryId}",
+        "definition": {
+          "entityName": "CoachingHistory",
+          "schema": {
+            "$ref": "#/backend/entities/CoachingHistory"
+          },
+          "description": "Stores coaching history entries associated with a specific user profile. Each document represents a coaching history entry. Path-based ownership.",
+          "params": [
+            {
+              "name": "userProfileId",
+              "description": "The unique identifier for the user profile."
+            },
+            {
+              "name": "coachingHistoryId",
+              "description": "The unique identifier for the coaching history entry."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/userProfiles/{userProfileId}/toolUsageLogs/{toolUsageLogId}",
+        "definition": {
+          "entityName": "ToolUsageLog",
+          "schema": {
+            "$ref": "#/backend/entities/ToolUsageLog"
+          },
+          "description": "Stores tool usage logs associated with a specific user profile. Each document represents a tool usage log entry. Path-based ownership.",
+          "params": [
+            {
+              "name": "userProfileId",
+              "description": "The unique identifier for the user profile."
+            },
+            {
+              "name": "toolUsageLogId",
+              "description": "The unique identifier for the tool usage log entry."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure is designed to ensure authorization independence, clarity, and scalability. User profiles are stored under `/userProfiles/{userProfileId}`. All data related to a specific user is stored under their profile ID to maintain clear ownership and avoid the need for complex authorization rules. Tasks, MetricsData, CoachingHistory, and ToolUsageLog are all stored as subcollections of the `userProfiles` collection using path-based ownership (e.g. `/userProfiles/{userProfileId}/tasks/{taskId}`). This approach provides authorization independence, eliminating the need for `get()` calls in security rules because access control is determined by the document path. The structure supports the required QAPs by ensuring that listing operations are secure and only return data associated with the authenticated user."
+  }
+}
