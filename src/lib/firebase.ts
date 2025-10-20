@@ -3,15 +3,14 @@ import { getApp, getApps, initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+// Your web app's Firebase configuration from environment variables
 const firebaseConfig = {
-  projectId: "studio-2615913698-17c08",
-  appId: "1:709307375131:web:ef682319693ea2b9dca2be",
-  apiKey: "AIzaSyBUABjFDR3oROvRvY2h7xWihsqNrypj19c",
-  authDomain: "studio-2615913698-17c08.firebaseapp.com",
-  messagingSenderId: "709307375131",
-  storageBucket: "studio-2615913698-17c08.appspot.com"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
 // Initialize Firebase
