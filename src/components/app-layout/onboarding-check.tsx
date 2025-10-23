@@ -1,6 +1,6 @@
 'use client';
 
-import { useUser, useFirestore } from '@/firebase';
+import { useUser, useFirestore, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState, ReactNode } from 'react';
@@ -14,7 +14,7 @@ export function OnboardingCheck({ children }: { children: ReactNode }) {
   const [profileChecked, setProfileChecked] = useState(false);
 
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || !firestore) return;
 
     if (!user) {
       router.replace('/login');
@@ -29,12 +29,20 @@ export function OnboardingCheck({ children }: { children: ReactNode }) {
 
     const checkProfile = async () => {
       const businessProfileRef = doc(firestore, 'users', user.uid);
-      const businessProfileSnap = await getDoc(businessProfileRef);
-      
-      if (!businessProfileSnap.exists() || !businessProfileSnap.data()?.onboardingComplete) {
-        router.replace('/onboarding');
-      } else {
-        setProfileChecked(true);
+      try {
+        const businessProfileSnap = await getDoc(businessProfileRef);
+        
+        if (!businessProfileSnap.exists() || !businessProfileSnap.data()?.onboardingComplete) {
+          router.replace('/onboarding');
+        } else {
+          setProfileChecked(true);
+        }
+      } catch (e) {
+         const permissionError = new FirestorePermissionError({
+          path: businessProfileRef.path,
+          operation: 'get',
+        });
+        errorEmitter.emit('permission-error', permissionError);
       }
     };
 
