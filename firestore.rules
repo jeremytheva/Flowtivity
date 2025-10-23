@@ -1,164 +1,67 @@
-/**
- * @fileoverview Firestore Security Rules for SoloStrategist OS.
- *
- * Core Philosophy:
- * This ruleset enforces a strict user-ownership model. Each user has a profile document
- * and all data (tasks, metrics, coaching history, tool usage logs) is nested under their
- * profile, accessible only to the owning user.
- *
- * Data Structure:
- * - /userProfiles/{userId}:  User profile documents.
- * - /userProfiles/{userId}/tasks/{taskId}: Tasks associated with a user.
- * - /userProfiles/{userId}/metricsData/{metricsDataId}: Metrics data for a user.
- * - /userProfiles/{userId}/coachingHistory/{coachingHistoryId}: Coaching history for a user.
- * - /userProfiles/{userId}/toolUsageLogs/{toolUsageLogId}: Tool usage logs for a user.
- *
- * Key Security Decisions:
- * - User data is strictly segregated. Users can only access their own data.
- * - No user listing is allowed to prevent data leakage.
- *
- * Denormalization for Authorization:
- *  - The data structure itself enforces authorization by nesting all user-related data
- *    under the /userProfiles/{userId} path.  This eliminates the need for `get()` calls
- *    or complex queries within the rules, as ownership can be determined directly from the path.
- */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Protects UserProfile documents.
-     * @path /userProfiles/{userProfileId}
-     * @allow (create) - User with ID 'user123' can create their profile document.
-     * @allow (get) - User with ID 'user123' can retrieve their profile document.
-     * @allow (update) - User with ID 'user123' can update their profile document.
-     * @allow (delete) - User with ID 'user123' can delete their profile document.
-     * @deny (create) - User with ID 'user456' attempts to create a profile document with ID 'user123'.
-     * @principle Enforces document ownership; only the user can create, read, update, or delete their profile.
+     * @description Checks if the request is authenticated.
+     * @path N/A
+     * @allow N/A
+     * @deny N/A
+     * @principle Requires authentication for all access.
      */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * @description Checks if the authenticated user ID matches the provided user ID.
+     * @path N/A
+     * @allow N/A
+     * @deny N/A
+     * @principle Enforces user-based ownership.
+     */
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
     match /userProfiles/{userProfileId} {
-      function isOwner(userProfileId) {
-        return request.auth.uid == userProfileId;
-      }
-
-      function isExistingOwner(userProfileId) {
-          return isOwner(userProfileId) && resource != null;
-      }
-
-      allow get: if isOwner(userProfileId);
-      allow list: if false; // No listing of user profiles
-
-      allow create: if isOwner(userProfileId) && request.resource.data.id == userProfileId;
-      allow update: if isExistingOwner(userProfileId) && request.resource.data.id == resource.data.id;
-      allow delete: if isExistingOwner(userProfileId);
+      allow get: if isSignedIn() && isOwner(userProfileId);
+      allow list: if false;
+      allow create: if isSignedIn() && isOwner(userProfileId);
+      allow update: if isSignedIn() && isOwner(userProfileId);
+      allow delete: if isSignedIn() && isOwner(userProfileId);
     }
 
-    /**
-     * @description Protects Task documents under a user's profile.
-     * @path /userProfiles/{userProfileId}/tasks/{taskId}
-     * @allow (create) - User with ID 'user123' can create a task under their profile.
-     * @allow (get) - User with ID 'user123' can retrieve a task under their profile.
-     * @allow (update) - User with ID 'user123' can update a task under their profile.
-     * @allow (delete) - User with ID 'user123' can delete a task under their profile.
-     * @deny (create) - User with ID 'user456' attempts to create a task under user 'user123''s profile.
-     * @principle Enforces path-based ownership; only the user whose ID matches the path can modify tasks.
-     */
     match /userProfiles/{userProfileId}/tasks/{taskId} {
-      function isOwner(userProfileId) {
-        return request.auth.uid == userProfileId;
-      }
-
-      function isExistingOwner(userProfileId) {
-          return isOwner(userProfileId) && resource != null;
-      }
-
-      allow get: if isOwner(userProfileId);
-      allow list: if isOwner(userProfileId);
-
-      allow create: if isOwner(userProfileId) && request.resource.data.userProfileId == userProfileId;
-      allow update: if isExistingOwner(userProfileId) && request.resource.data.userProfileId == resource.data.userProfileId;
-      allow delete: if isExistingOwner(userProfileId);
+      allow get: if isSignedIn() && isOwner(userProfileId);
+      allow list: if false;
+      allow create: if isSignedIn() && isOwner(userProfileId);
+      allow update: if isSignedIn() && isOwner(userProfileId);
+      allow delete: if isSignedIn() && isOwner(userProfileId);
     }
 
-    /**
-     * @description Protects MetricsData documents under a user's profile.
-     * @path /userProfiles/{userProfileId}/metricsData/{metricsDataId}
-     * @allow (create) - User with ID 'user123' can create metrics data under their profile.
-     * @allow (get) - User with ID 'user123' can retrieve metrics data under their profile.
-     * @allow (update) - User with ID 'user123' can update metrics data under their profile.
-     * @allow (delete) - User with ID 'user123' can delete metrics data under their profile.
-     * @deny (create) - User with ID 'user456' attempts to create metrics data under user 'user123''s profile.
-     * @principle Enforces path-based ownership; only the user whose ID matches the path can modify metrics data.
-     */
     match /userProfiles/{userProfileId}/metricsData/{metricsDataId} {
-      function isOwner(userProfileId) {
-        return request.auth.uid == userProfileId;
-      }
-
-      function isExistingOwner(userProfileId) {
-          return isOwner(userProfileId) && resource != null;
-      }
-
-      allow get: if isOwner(userProfileId);
-      allow list: if isOwner(userProfileId);
-
-      allow create: if isOwner(userProfileId) && request.resource.data.userProfileId == userProfileId;
-      allow update: if isExistingOwner(userProfileId) && request.resource.data.userProfileId == resource.data.userProfileId;
-      allow delete: if isExistingOwner(userProfileId);
+      allow get: if isSignedIn() && isOwner(userProfileId);
+      allow list: if false;
+      allow create: if isSignedIn() && isOwner(userProfileId);
+      allow update: if isSignedIn() && isOwner(userProfileId);
+      allow delete: if isSignedIn() && isOwner(userProfileId);
     }
 
-    /**
-     * @description Protects CoachingHistory documents under a user's profile.
-     * @path /userProfiles/{userProfileId}/coachingHistory/{coachingHistoryId}
-     * @allow (create) - User with ID 'user123' can create coaching history under their profile.
-     * @allow (get) - User with ID 'user123' can retrieve coaching history under their profile.
-     * @allow (update) - User with ID 'user123' can update coaching history under their profile.
-     * @allow (delete) - User with ID 'user123' can delete coaching history under their profile.
-     * @deny (create) - User with ID 'user456' attempts to create coaching history under user 'user123''s profile.
-     * @principle Enforces path-based ownership; only the user whose ID matches the path can modify coaching history.
-     */
     match /userProfiles/{userProfileId}/coachingHistory/{coachingHistoryId} {
-      function isOwner(userProfileId) {
-        return request.auth.uid == userProfileId;
-      }
-
-      function isExistingOwner(userProfileId) {
-          return isOwner(userProfileId) && resource != null;
-      }
-
-      allow get: if isOwner(userProfileId);
-      allow list: if isOwner(userProfileId);
-
-      allow create: if isOwner(userProfileId) && request.resource.data.userProfileId == userProfileId;
-      allow update: if isExistingOwner(userProfileId) && request.resource.data.userProfileId == resource.data.userProfileId;
-      allow delete: if isExistingOwner(userProfileId);
+      allow get: if isSignedIn() && isOwner(userProfileId);
+      allow list: if false;
+      allow create: if isSignedIn() && isOwner(userProfileId);
+      allow update: if isSignedIn() && isOwner(userProfileId);
+      allow delete: if isSignedIn() && isOwner(userProfileId);
     }
 
-    /**
-     * @description Protects ToolUsageLog documents under a user's profile.
-     * @path /userProfiles/{userProfileId}/toolUsageLogs/{toolUsageLogId}
-     * @allow (create) - User with ID 'user123' can create tool usage logs under their profile.
-     * @allow (get) - User with ID 'user123' can retrieve tool usage logs under their profile.
-     * @allow (update) - User with ID 'user123' can update tool usage logs under their profile.
-     * @allow (delete) - User with ID 'user123' can delete tool usage logs under their profile.
-     * @deny (create) - User with ID 'user456' attempts to create tool usage logs under user 'user123''s profile.
-     * @principle Enforces path-based ownership; only the user whose ID matches the path can modify tool usage logs.
-     */
     match /userProfiles/{userProfileId}/toolUsageLogs/{toolUsageLogId} {
-      function isOwner(userProfileId) {
-        return request.auth.uid == userProfileId;
-      }
-
-      function isExistingOwner(userProfileId) {
-          return isOwner(userProfileId) && resource != null;
-      }
-
-      allow get: if isOwner(userProfileId);
-      allow list: if isOwner(userProfileId);
-
-      allow create: if isOwner(userProfileId) && request.resource.data.userProfileId == userProfileId;
-      allow update: if isExistingOwner(userProfileId) && request.resource.data.userProfileId == resource.data.userProfileId;
-      allow delete: if isExistingOwner(userProfileId);
+      allow get: if isSignedIn() && isOwner(userProfileId);
+      allow list: if false;
+      allow create: if isSignedIn() && isOwner(userProfileId);
+      allow update: if isSignedIn() && isOwner(userProfileId);
+      allow delete: if isSignedIn() && isOwner(userProfileId);
     }
   }
 }
