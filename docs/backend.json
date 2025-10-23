@@ -181,104 +181,35 @@
     ]
   },
   "firestore": {
-    "structure": [
-      {
-        "path": "/userProfiles/{userProfileId}",
-        "definition": {
-          "entityName": "UserProfile",
-          "schema": {
-            "$ref": "#/backend/entities/UserProfile"
-          },
-          "description": "Stores user profile information. Each document represents a single user's profile.",
-          "params": [
-            {
-              "name": "userProfileId",
-              "description": "The unique identifier for the user profile."
-            }
-          ]
-        }
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
       },
-      {
-        "path": "/userProfiles/{userProfileId}/tasks/{taskId}",
-        "definition": {
-          "entityName": "Task",
-          "schema": {
-            "$ref": "#/backend/entities/Task"
-          },
-          "description": "Stores tasks associated with a specific user profile. Each document represents a task. Path-based ownership.",
-          "params": [
-            {
-              "name": "userProfileId",
-              "description": "The unique identifier for the user profile."
-            },
-            {
-              "name": "taskId",
-              "description": "The unique identifier for the task."
-            }
-          ]
-        }
+      "description": "Stores user profile information. Each document represents a single user's profile."
+    },
+    "/users/{userId}/tasks/{taskId}": {
+      "schema": {
+        "$ref": "#/entities/Task"
       },
-      {
-        "path": "/userProfiles/{userProfileId}/metricsData/{metricsDataId}",
-        "definition": {
-          "entityName": "MetricsData",
-          "schema": {
-            "$ref": "#/backend/entities/MetricsData"
-          },
-          "description": "Stores metrics data associated with a specific user profile. Each document represents metrics data. Path-based ownership.",
-          "params": [
-            {
-              "name": "userProfileId",
-              "description": "The unique identifier for the user profile."
-            },
-            {
-              "name": "metricsDataId",
-              "description": "The unique identifier for the metrics data."
-            }
-          ]
-        }
+      "description": "Stores tasks associated with a specific user profile."
+    },
+    "/users/{userId}/metrics/{metricId}": {
+      "schema": {
+        "$ref": "#/entities/MetricsData"
       },
-      {
-        "path": "/userProfiles/{userProfileId}/coachingHistory/{coachingHistoryId}",
-        "definition": {
-          "entityName": "CoachingHistory",
-          "schema": {
-            "$ref": "#/backend/entities/CoachingHistory"
-          },
-          "description": "Stores coaching history entries associated with a specific user profile. Each document represents a coaching history entry. Path-based ownership.",
-          "params": [
-            {
-              "name": "userProfileId",
-              "description": "The unique identifier for the user profile."
-            },
-            {
-              "name": "coachingHistoryId",
-              "description": "The unique identifier for the coaching history entry."
-            }
-          ]
-        }
+      "description": "Stores metrics data associated with a specific user profile."
+    },
+    "/users/{userId}/coachingHistory/{historyId}": {
+      "schema": {
+        "$ref": "#/entities/CoachingHistory"
       },
-      {
-        "path": "/userProfiles/{userProfileId}/toolUsageLogs/{toolUsageLogId}",
-        "definition": {
-          "entityName": "ToolUsageLog",
-          "schema": {
-            "$ref": "#/backend/entities/ToolUsageLog"
-          },
-          "description": "Stores tool usage logs associated with a specific user profile. Each document represents a tool usage log entry. Path-based ownership.",
-          "params": [
-            {
-              "name": "userProfileId",
-              "description": "The unique identifier for the user profile."
-            },
-            {
-              "name": "toolUsageLogId",
-              "description": "The unique identifier for the tool usage log entry."
-            }
-          ]
-        }
-      }
-    ],
-    "reasoning": "The Firestore structure is designed to ensure authorization independence, clarity, and scalability. User profiles are stored under `/userProfiles/{userProfileId}`. All data related to a specific user is stored under their profile ID to maintain clear ownership and avoid the need for complex authorization rules. Tasks, MetricsData, CoachingHistory, and ToolUsageLog are all stored as subcollections of the `userProfiles` collection using path-based ownership (e.g. `/userProfiles/{userProfileId}/tasks/{taskId}`). This approach provides authorization independence, eliminating the need for `get()` calls in security rules because access control is determined by the document path. The structure supports the required QAPs by ensuring that listing operations are secure and only return data associated with the authenticated user."
+      "description": "Stores coaching history for a specific user profile."
+    },
+    "/users/{userId}/toolUsageLogs/{logId}": {
+      "schema": {
+        "$ref": "#/entities/ToolUsageLog"
+      },
+      "description": "Stores tool usage logs for a specific user profile."
+    }
   }
 }
