@@ -3,8 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 
 export default function OnboardingPage() {
   return (
-    <div className="container mx-auto flex items-center justify-center">
-      <Card className="w-full max-w-2xl">
+    <div className="container mx-auto pt-8">
+      <Card className="w-full max-w-2xl mx-auto">
         <CardHeader className="text-center">
           <CardTitle className="font-headline text-3xl">Welcome to SoloStrategist OS</CardTitle>
           <CardDescription>Let's set up your business profile to personalize your experience.</CardDescription>
