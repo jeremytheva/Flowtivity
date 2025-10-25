@@ -65,26 +65,44 @@ export function OnboardingWizard() {
     setLoading(true);
 
     const userDocRef = doc(firestore, 'users', user.uid);
+    const businessProfileDocRef = doc(firestore, 'users', user.uid, 'businessProfile', 'data');
     const metricsDocRef = doc(firestore, 'users', user.uid, 'metrics', 'data');
     
     const profileData = {
-        ...data,
+        businessName: data.businessName,
+        industry: data.industry,
+        teamSize: data.teamSize,
+        goals: data.goals,
+    };
+    
+    const userOnboardingData = {
         onboardingComplete: true
     };
+
     const metricsData = {
         leadCount: 120,
         engagementRate: 45,
         conversionRate: 3.2,
     };
 
-    const updateProfilePromise = updateDoc(userDocRef, profileData).catch(error => {
+    const setProfilePromise = setDoc(businessProfileDocRef, profileData).catch(error => {
       const permissionError = new FirestorePermissionError({
-        path: userDocRef.path,
-        operation: 'update',
+        path: businessProfileDocRef.path,
+        operation: 'create',
         requestResourceData: profileData,
       });
       errorEmitter.emit('permission-error', permissionError);
-      throw error; // Re-throw to be caught by Promise.all
+      throw error;
+    });
+
+    const updateUserPromise = updateDoc(userDocRef, userOnboardingData).catch(error => {
+      const permissionError = new FirestorePermissionError({
+        path: userDocRef.path,
+        operation: 'update',
+        requestResourceData: userOnboardingData,
+      });
+      errorEmitter.emit('permission-error', permissionError);
+      throw error;
     });
 
     const setMetricsPromise = setDoc(metricsDocRef, metricsData).catch(error => {
@@ -94,11 +112,11 @@ export function OnboardingWizard() {
         requestResourceData: metricsData,
       });
       errorEmitter.emit('permission-error', permissionError);
-      throw error; // Re-throw to be caught by Promise.all
+      throw error;
     });
 
     try {
-        await Promise.all([updateProfilePromise, setMetricsPromise]);
+        await Promise.all([setProfilePromise, updateUserPromise, setMetricsPromise]);
         toast({ title: 'Profile Created!', description: "You're all set. Welcome aboard!" });
         router.push('/dashboard');
     } catch (error) {

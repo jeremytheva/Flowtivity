@@ -11,7 +11,7 @@ import {
   signInWithPopup,
   updateProfile,
 } from 'firebase/auth';
-import { useAuth, useFirestore } from '@/firebase';
+import { useAuth, useFirestore, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { GoogleAuthProvider } from 'firebase/auth';
 
@@ -64,6 +64,25 @@ export function AuthForm({ mode }: AuthFormProps) {
     },
   });
 
+  const handleUserCreation = async (user: any, name?: string) => {
+    const userDocRef = doc(firestore, 'users', user.uid);
+    const userData = {
+      uid: user.uid,
+      email: user.email,
+      displayName: name || user.displayName || '',
+      onboardingComplete: false,
+    };
+    await setDoc(userDocRef, userData, { merge: true }).catch(err => {
+        const permissionError = new FirestorePermissionError({
+            path: userDocRef.path,
+            operation: 'write',
+            requestResourceData: userData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+        throw err;
+    });
+  };
+
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setLoading(true);
     setError(null);
@@ -73,12 +92,7 @@ export function AuthForm({ mode }: AuthFormProps) {
         if (values.name) {
           await updateProfile(userCredential.user, { displayName: values.name });
         }
-        await setDoc(doc(firestore, 'users', userCredential.user.uid), {
-          uid: userCredential.user.uid,
-          email: userCredential.user.email,
-          displayName: values.name || '',
-          onboardingComplete: false,
-        });
+        await handleUserCreation(userCredential.user, values.name);
       } else {
         await signInWithEmailAndPassword(auth, values.email, values.password);
       }
@@ -95,13 +109,7 @@ export function AuthForm({ mode }: AuthFormProps) {
     setError(null);
     try {
       const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-      await setDoc(doc(firestore, 'users', user.uid), {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          onboardingComplete: false, // Assume new user or re-check
-      }, { merge: true });
+      await handleUserCreation(result.user);
       router.push('/dashboard');
     } catch (err: any) {
       setError(err.message || 'Failed to sign in with Google.');
