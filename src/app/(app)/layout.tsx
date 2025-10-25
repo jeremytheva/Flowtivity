@@ -1,7 +1,7 @@
 import { AppHeader } from "@/components/app-layout/app-header";
 import { AppSidebar } from "@/components/app-layout/app-sidebar";
 import { OnboardingCheck } from "@/components/app-layout/onboarding-check";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { SidebarProvider } from "@/components/ui/sidebar";
 
 export default function AppLayout({
   children,
@@ -10,16 +10,16 @@ export default function AppLayout({
 }) {
   return (
     <SidebarProvider>
-      <div className="min-h-screen bg-background">
+      <div className="relative min-h-screen bg-background">
         <AppSidebar />
-        <SidebarInset>
+        <main className="md:pl-12 transition-[padding] group-data-[sidebar-state=expanded]/sidebar-wrapper:md:pl-64">
             <AppHeader />
             <OnboardingCheck>
               <div className="p-4 sm:p-6 lg:p-8">
                 {children}
               </div>
             </OnboardingCheck>
-        </SidebarInset>
+        </main>
       </div>
     </SidebarProvider>
   );
