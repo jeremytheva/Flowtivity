@@ -2,142 +2,133 @@
  * @fileoverview Firestore Security Rules for SoloStrategist OS.
  *
  * Core Philosophy:
- * This ruleset enforces a strict user-ownership model. Each user can only access their own data.
+ * This ruleset enforces a strict user-ownership model. Each user has full
+ * control over their own profile and associated data (tasks, metrics, coaching history,
+ * tool usage logs). No cross-user data access is permitted except where explicitly
+ * configured.
  *
  * Data Structure:
- * All data is nested under /users/{userId}, ensuring data isolation between users.
- * - /users/{userId}: Stores user profile information.
- * - /users/{userId}/tasks/{taskId}: Stores tasks associated with a user.
- * - /users/{userId}/metrics/{metricId}: Stores metrics data associated with a user.
- * - /users/{userId}/coachingHistory/{historyId}: Stores AI coaching history.
- * - /users/{userId}/toolUsageLogs/{logId}: Stores tool usage logs for identifying money leaks.
+ * All data is nested under /users/{userId}, ensuring clear ownership.
+ *  - /users/{userId} (UserProfile)
+ *  - /users/{userId}/tasks/{taskId} (Task)
+ *  - /users/{userId}/metrics/{metricId} (MetricsData)
+ *  - /users/{userId}/coachingHistory/{historyId} (CoachingHistory)
+ *  - /users/{userId}/toolUsageLogs/{logId} (ToolUsageLog)
  *
  * Key Security Decisions:
- * - User data is strictly segregated, with each user having exclusive access to their own data.
- * - No user listing is allowed to prevent information disclosure.
- * - Self-creation is allowed for the `/users/{userId}` document, enabling new user registration.
- *
- * Denormalization for Authorization:
- *  The `userProfileId` field is present on Task, MetricsData, CoachingHistory, and ToolUsageLog documents. This denormalization enables simple, efficient ownership checks without requiring additional reads.
+ *  - User profiles can only be created by themselves and updated by themselves.
+ *  - Data consistency is enforced: the {userId} path segment must match the
+ *    'id' field within the UserProfile document. This ensures a user cannot
+ *    impersonate or spoof another user's data.
+ *  - Listing of user profiles is disallowed. This prevents enumeration attacks
+ *    and protects user privacy.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Helper function to check if the user is signed in
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if the authenticated user is the owner of the document
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // Helper function to check if the authenticated user is the owner of the existing document
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+
     /**
-     * @description Enforces user-ownership for UserProfile documents. Only the authenticated user can read, update, or delete their own profile.
-     * @path /users/{userId}
-     * @allow (create) - Authenticated user creates their own profile with matching userId.
-     * @allow (get, update, delete) - Authenticated user accesses their own profile.
-     * @deny (create) - Authenticated user attempts to create a profile with a mismatched userId.
-     * @deny (get, update, delete) - Authenticated user attempts to access another user's profile.
-     * @principle Enforces document ownership for all operations.
+     * @description Controls access to user profile documents.
+     * @path /databases/{database}/documents/users/{userId}
+     * @allow (create) User with UID 'userId' can create their own profile.
+     * @allow (update) User with UID 'userId' can update their own profile.
+     * @deny  (create) User tries to create a profile with an ID different from their UID.
+     * @deny  (update) User tries to update a profile that doesn't exist or isn't theirs.
+     * @principle Enforces document ownership for writes.
      */
     match /users/{userId} {
-      function isOwner(userId) {
-        return request.auth != null && request.auth.uid == userId;
-      }
-
-      function isExistingOwner(userId) {
-          return isOwner(userId) && resource != null;
-      }
-
-      allow get: if isOwner(userId);
+      allow get: if false;
       allow list: if false;
-      allow create: if isOwner(userId) && request.resource.data.id == userId;
+
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.id == userId;
       allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Enforces user-ownership for Task documents within a user's profile. Only the authenticated user can manage their own tasks.
-     * @path /users/{userId}/tasks/{taskId}
-     * @allow (create, get, update, delete, list) - Authenticated user manages their own tasks.
-     * @deny (create, get, update, delete, list) - Authenticated user attempts to access another user's tasks.
-     * @principle Enforces document ownership for all operations.
+     * @description Controls access to tasks for a specific user.
+     * @path /databases/{database}/documents/users/{userId}/tasks/{taskId}
+     * @allow (create) User with UID 'userId' can create tasks under their profile.
+     * @allow (update) User with UID 'userId' can update their own tasks.
+     * @deny  (create) User tries to create a task for a different user.
+     * @deny  (update) User tries to update a task that doesn't exist or isn't theirs.
+     * @principle Enforces document ownership for writes.
      */
     match /users/{userId}/tasks/{taskId} {
-      function isOwner(userId) {
-        return request.auth != null && request.auth.uid == userId;
-      }
-
-      function isExistingOwner(userId) {
-          return isOwner(userId) && resource != null;
-      }
-
       allow get: if isOwner(userId);
       allow list: if isOwner(userId);
-      allow create: if isOwner(userId) && request.resource.data.userProfileId == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.userProfileId == resource.data.userProfileId;
+
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.userProfileId == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.userProfileId == userId;
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Enforces user-ownership for MetricsData documents within a user's profile. Only the authenticated user can access their own metrics data.
-     * @path /users/{userId}/metrics/{metricId}
-     * @allow (create, get, update, delete, list) - Authenticated user manages their own metrics data.
-     * @deny (create, get, update, delete, list) - Authenticated user attempts to access another user's metrics data.
-     * @principle Enforces document ownership for all operations.
+     * @description Controls access to metrics data for a specific user.
+     * @path /databases/{database}/documents/users/{userId}/metrics/{metricId}
+     * @allow (create) User with UID 'userId' can create metrics data under their profile.
+     * @allow (update) User with UID 'userId' can update their own metrics data.
+     * @deny  (create) User tries to create metrics data for a different user.
+     * @deny  (update) User tries to update metrics data that doesn't exist or isn't theirs.
+     * @principle Enforces document ownership for writes.
      */
     match /users/{userId}/metrics/{metricId} {
-      function isOwner(userId) {
-        return request.auth != null && request.auth.uid == userId;
-      }
-
-      function isExistingOwner(userId) {
-          return isOwner(userId) && resource != null;
-      }
-
       allow get: if isOwner(userId);
       allow list: if isOwner(userId);
-      allow create: if isOwner(userId) && request.resource.data.userProfileId == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.userProfileId == resource.data.userProfileId;
+
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.userProfileId == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.userProfileId == userId;
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Enforces user-ownership for CoachingHistory documents within a user's profile. Only the authenticated user can access their own coaching history.
-     * @path /users/{userId}/coachingHistory/{historyId}
-     * @allow (create, get, update, delete, list) - Authenticated user manages their own coaching history.
-     * @deny (create, get, update, delete, list) - Authenticated user attempts to access another user's coaching history.
-     * @principle Enforces document ownership for all operations.
+     * @description Controls access to coaching history for a specific user.
+     * @path /databases/{database}/documents/users/{userId}/coachingHistory/{historyId}
+     * @allow (create) User with UID 'userId' can create coaching history under their profile.
+     * @allow (update) User with UID 'userId' can update their own coaching history.
+     * @deny  (create) User tries to create coaching history for a different user.
+     * @deny  (update) User tries to update coaching history that doesn't exist or isn't theirs.
+     * @principle Enforces document ownership for writes.
      */
     match /users/{userId}/coachingHistory/{historyId} {
-      function isOwner(userId) {
-        return request.auth != null && request.auth.uid == userId;
-      }
-
-      function isExistingOwner(userId) {
-          return isOwner(userId) && resource != null;
-      }
-
       allow get: if isOwner(userId);
       allow list: if isOwner(userId);
-      allow create: if isOwner(userId) && request.resource.data.userProfileId == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.userProfileId == resource.data.userProfileId;
+
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.userProfileId == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.userProfileId == userId;
       allow delete: if isExistingOwner(userId);
     }
 
     /**
-     * @description Enforces user-ownership for ToolUsageLog documents within a user's profile. Only the authenticated user can access their own tool usage logs.
-     * @path /users/{userId}/toolUsageLogs/{logId}
-     * @allow (create, get, update, delete, list) - Authenticated user manages their own tool usage logs.
-     * @deny (create, get, update, delete, list) - Authenticated user attempts to access another user's tool usage logs.
-     * @principle Enforces document ownership for all operations.
+     * @description Controls access to tool usage logs for a specific user.
+     * @path /databases/{database}/documents/users/{userId}/toolUsageLogs/{logId}
+     * @allow (create) User with UID 'userId' can create tool usage logs under their profile.
+     * @allow (update) User with UID 'userId' can update their own tool usage logs.
+     * @deny  (create) User tries to create tool usage logs for a different user.
+     * @deny  (update) User tries to update tool usage logs that doesn't exist or isn't theirs.
+     * @principle Enforces document ownership for writes.
      */
     match /users/{userId}/toolUsageLogs/{logId} {
-      function isOwner(userId) {
-        return request.auth != null && request.auth.uid == userId;
-      }
-
-      function isExistingOwner(userId) {
-          return isOwner(userId) && resource != null;
-      }
-
       allow get: if isOwner(userId);
       allow list: if isOwner(userId);
-      allow create: if isOwner(userId) && request.resource.data.userProfileId == userId;
-      allow update: if isExistingOwner(userId) && request.resource.data.userProfileId == resource.data.userProfileId;
+
+      allow create: if isSignedIn() && isOwner(userId) && request.resource.data.userProfileId == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.userProfileId == userId;
       allow delete: if isExistingOwner(userId);
     }
   }
