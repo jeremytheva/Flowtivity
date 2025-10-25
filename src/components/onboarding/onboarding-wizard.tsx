@@ -35,17 +35,21 @@ const step2Schema = z.object({
   }),
 });
 const formSchema = step1Schema.merge(step2Schema);
+type FormData = z.infer<typeof formSchema>;
 
 export function OnboardingWizard() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [wizardData, setWizardData] = useState<Partial<FormData>>({});
   const router = useRouter();
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
 
-  const methods = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(step === 1 ? step1Schema : step2Schema),
+  const currentSchema = step === 1 ? step1Schema : step2Schema;
+  
+  const methods = useForm<z.infer<typeof currentSchema>>({
+    resolver: zodResolver(currentSchema),
     defaultValues: {
       businessName: '',
       industry: '',
@@ -54,25 +58,30 @@ export function OnboardingWizard() {
     },
   });
 
-  const nextStep = () => setStep(s => s + 1);
+  const nextStep = (data: Partial<FormData>) => {
+    setWizardData(prev => ({ ...prev, ...data }));
+    setStep(s => s + 1);
+  }
   const prevStep = () => setStep(s => s - 1);
 
-  const onSubmit = async (data: z.infer<typeof formSchema>) => {
+  const onSubmit = async (step2Data: z.infer<typeof step2Schema>) => {
     if (!user) {
       toast({ title: 'Error', description: 'You must be logged in.', variant: 'destructive' });
       return;
     }
     setLoading(true);
 
+    const finalData = { ...wizardData, ...step2Data } as FormData;
+
     const userDocRef = doc(firestore, 'users', user.uid);
     const businessProfileDocRef = doc(firestore, 'users', user.uid, 'businessProfile', 'data');
     const metricsDocRef = doc(firestore, 'users', user.uid, 'metrics', 'data');
     
     const profileData = {
-        businessName: data.businessName,
-        industry: data.industry,
-        teamSize: data.teamSize,
-        goals: data.goals,
+        businessName: finalData.businessName,
+        industry: finalData.industry,
+        teamSize: finalData.teamSize,
+        goals: finalData.goals,
     };
     
     const userOnboardingData = {
@@ -124,10 +133,13 @@ export function OnboardingWizard() {
         setLoading(false);
     }
   };
+  
+  const handleNextStep = methods.handleSubmit(data => nextStep(data));
+  const handleFinalSubmit = methods.handleSubmit(data => onSubmit(data as z.infer<typeof step2Schema>));
 
   return (
     <FormProvider {...methods}>
-      <form onSubmit={methods.handleSubmit(onSubmit)} className="space-y-8">
+      <form onSubmit={step === 1 ? handleNextStep : handleFinalSubmit} className="space-y-8">
         <Progress value={(step / 2) * 100} className="w-full" />
         
         {step === 1 && (
@@ -237,10 +249,7 @@ export function OnboardingWizard() {
         <div className="flex justify-between">
           {step > 1 && <Button type="button" variant="outline" onClick={prevStep}>Back</Button>}
           <div className="flex-grow" />
-          {step < 2 && <Button type="button" onClick={async () => {
-              const isValid = await methods.trigger();
-              if (isValid) nextStep();
-          }}>Next</Button>}
+          {step < 2 && <Button type="submit">Next</Button>}
           {step === 2 && <Button type="submit" disabled={loading}>
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Finish
