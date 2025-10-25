@@ -1,9 +1,9 @@
 'use client';
 
-import { useUser, useFirestore, errorEmitter, FirestorePermissionError, useMemoFirebase, useDoc } from '@/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { useUser, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
+import { doc } from 'firebase/firestore';
 import { useRouter, usePathname } from 'next/navigation';
-import { useEffect, useState, ReactNode } from 'react';
+import { useEffect, ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { UserProfile } from '@/lib/types';
 
@@ -41,7 +41,7 @@ export function OnboardingCheck({ children }: { children: ReactNode }) {
 
   }, [user, userProfile, isChecking, router, pathname]);
 
-  if (isChecking || (user && !pathname.startsWith('/onboarding') && !userProfile?.onboardingComplete)) {
+  if (isChecking) {
     return (
       <div className="flex h-[calc(100vh-8rem)] w-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -49,5 +49,16 @@ export function OnboardingCheck({ children }: { children: ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  // Once loading is complete, render children only if the user is onboarded
+  // or is on the onboarding page itself.
+  if (userProfile?.onboardingComplete || pathname.startsWith('/onboarding')) {
+    return <>{children}</>;
+  }
+
+  // Otherwise, render a loading state until the redirect is complete.
+  return (
+      <div className="flex h-[calc(100vh-8rem)] w-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
 }
