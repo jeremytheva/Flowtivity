@@ -50,12 +50,8 @@ export function OnboardingWizard() {
   
   const methods = useForm<z.infer<typeof currentSchema>>({
     resolver: zodResolver(currentSchema),
-    defaultValues: {
-      businessName: '',
-      industry: '',
-      teamSize: '1',
-      goals: [],
-    },
+    // @ts-ignore
+    defaultValues: wizardData,
   });
 
   const nextStep = (data: Partial<FormData>) => {
@@ -74,58 +70,42 @@ export function OnboardingWizard() {
     const finalData = { ...wizardData, ...step2Data } as FormData;
 
     const userDocRef = doc(firestore, 'users', user.uid);
-    const businessProfileDocRef = doc(firestore, 'users', user.uid, 'businessProfile', 'data');
-    const metricsDocRef = doc(firestore, 'users', user.uid, 'metrics', 'data');
+    const metricsDocRef = doc(firestore, 'metrics', user.uid);
     
-    const profileData = {
-        businessName: finalData.businessName,
-        industry: finalData.industry,
-        teamSize: finalData.teamSize,
-        goals: finalData.goals,
-    };
-    
-    const userOnboardingData = {
-        onboardingComplete: true
+    const userProfileUpdate = {
+        ...finalData,
+        onboardingComplete: true,
     };
 
-    const metricsData = {
+    const initialMetrics = {
+        userId: user.uid,
         leadCount: 120,
         engagementRate: 45,
         conversionRate: 3.2,
     };
 
-    const setProfilePromise = setDoc(businessProfileDocRef, profileData).catch(error => {
-      const permissionError = new FirestorePermissionError({
-        path: businessProfileDocRef.path,
-        operation: 'create',
-        requestResourceData: profileData,
-      });
-      errorEmitter.emit('permission-error', permissionError);
-      throw error;
-    });
-
-    const updateUserPromise = updateDoc(userDocRef, userOnboardingData).catch(error => {
+    const updateUserPromise = updateDoc(userDocRef, userProfileUpdate).catch(error => {
       const permissionError = new FirestorePermissionError({
         path: userDocRef.path,
         operation: 'update',
-        requestResourceData: userOnboardingData,
+        requestResourceData: userProfileUpdate,
       });
       errorEmitter.emit('permission-error', permissionError);
       throw error;
     });
 
-    const setMetricsPromise = setDoc(metricsDocRef, metricsData).catch(error => {
+    const setMetricsPromise = setDoc(metricsDocRef, initialMetrics).catch(error => {
       const permissionError = new FirestorePermissionError({
         path: metricsDocRef.path,
         operation: 'create',
-        requestResourceData: metricsData,
+        requestResourceData: initialMetrics,
       });
       errorEmitter.emit('permission-error', permissionError);
       throw error;
     });
 
     try {
-        await Promise.all([setProfilePromise, updateUserPromise, setMetricsPromise]);
+        await Promise.all([updateUserPromise, setMetricsPromise]);
         toast({ title: 'Profile Created!', description: "You're all set. Welcome aboard!" });
         router.push('/dashboard');
     } catch (error) {
@@ -134,7 +114,7 @@ export function OnboardingWizard() {
     }
   };
   
-  const handleNextStep = methods.handleSubmit(data => nextStep(data));
+  const handleNextStep = methods.handleSubmit(data => nextStep(data as Partial<FormData>));
   const handleFinalSubmit = methods.handleSubmit(data => onSubmit(data as z.infer<typeof step2Schema>));
 
   return (
@@ -220,10 +200,11 @@ export function OnboardingWizard() {
                               <Checkbox
                                 checked={field.value?.includes(item.id)}
                                 onCheckedChange={(checked) => {
+                                  const currentValue = field.value || [];
                                   return checked
-                                    ? field.onChange([...field.value, item.id])
+                                    ? field.onChange([...currentValue, item.id])
                                     : field.onChange(
-                                        field.value?.filter(
+                                        currentValue?.filter(
                                           (value) => value !== item.id
                                         )
                                       )

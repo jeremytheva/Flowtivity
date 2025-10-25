@@ -1,55 +1,47 @@
 'use client';
 
-import { useUser, useFirestore, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { useUser, useFirestore, errorEmitter, FirestorePermissionError, useMemoFirebase, useDoc } from '@/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState, ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
+import type { UserProfile } from '@/lib/types';
 
 export function OnboardingCheck({ children }: { children: ReactNode }) {
   const { user, isUserLoading: authLoading } = useUser();
   const firestore = useFirestore();
   const router = useRouter();
   const pathname = usePathname();
-  const [profileChecked, setProfileChecked] = useState(false);
+  
+  const userDocRef = useMemoFirebase(() => {
+    if (!user || !firestore) return null;
+    return doc(firestore, 'users', user.uid);
+  }, [user, firestore]);
+
+  const { data: userProfile, isLoading: profileLoading } = useDoc<UserProfile>(userDocRef);
+
+  const isChecking = authLoading || profileLoading;
 
   useEffect(() => {
-    if (authLoading || !firestore) return;
+    if (isChecking) return;
 
     if (!user) {
       router.replace('/login');
       return;
     }
 
-    // No need to check if we are on the onboarding page
+    // No need to check if we are already on the onboarding page
     if (pathname.startsWith('/onboarding')) {
-      setProfileChecked(true);
       return;
     }
 
-    const checkProfile = async () => {
-      const businessProfileRef = doc(firestore, 'users', user.uid);
-      try {
-        const businessProfileSnap = await getDoc(businessProfileRef);
-        
-        if (!businessProfileSnap.exists() || !businessProfileSnap.data()?.onboardingComplete) {
-          router.replace('/onboarding');
-        } else {
-          setProfileChecked(true);
-        }
-      } catch (e) {
-         const permissionError = new FirestorePermissionError({
-          path: businessProfileRef.path,
-          operation: 'get',
-        });
-        errorEmitter.emit('permission-error', permissionError);
-      }
-    };
+    if (!userProfile?.onboardingComplete) {
+        router.replace('/onboarding');
+    }
 
-    checkProfile();
-  }, [user, authLoading, router, pathname, firestore]);
+  }, [user, userProfile, isChecking, router, pathname]);
 
-  if (!profileChecked || authLoading) {
+  if (isChecking || (user && !pathname.startsWith('/onboarding') && !userProfile?.onboardingComplete)) {
     return (
       <div className="flex h-[calc(100vh-8rem)] w-full items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />

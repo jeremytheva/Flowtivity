@@ -6,18 +6,37 @@
       "type": "object",
       "description": "Represents a user's profile within the SoloStrategist OS.",
       "properties": {
-        "id": {
+        "uid": {
           "type": "string",
-          "description": "Unique identifier for the user profile."
+          "description": "Unique identifier for the user, matching Firebase Auth UID."
         },
         "email": {
           "type": "string",
           "description": "User's email address.",
           "format": "email"
         },
+        "displayName": {
+          "type": "string",
+          "description": "User's display name."
+        },
         "businessName": {
           "type": "string",
           "description": "Name of the user's business."
+        },
+        "industry": {
+          "type": "string",
+          "description": "The industry the business operates in."
+        },
+        "teamSize": {
+          "type": "string",
+          "description": "The size of the user's team."
+        },
+        "goals": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The user's primary business goals."
         },
         "onboardingComplete": {
           "type": "boolean",
@@ -25,9 +44,8 @@
         }
       },
       "required": [
-        "id",
+        "uid",
         "email",
-        "businessName",
         "onboardingComplete"
       ]
     },
@@ -41,9 +59,9 @@
           "type": "string",
           "description": "Unique identifier for the task."
         },
-        "userProfileId": {
+        "userId": {
           "type": "string",
-          "description": "Reference to UserProfile. (Relationship: UserProfile 1:N Task)"
+          "description": "The UID of the user who owns this task."
         },
         "title": {
           "type": "string",
@@ -56,14 +74,19 @@
         "status": {
           "type": "string",
           "description": "Current status of the task (e.g., 'To Do', 'In Progress', 'Done')."
+        },
+        "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the task was created."
         }
       },
       "required": [
         "id",
-        "userProfileId",
+        "userId",
         "title",
-        "description",
-        "status"
+        "status",
+        "createdAt"
       ]
     },
     "MetricsData": {
@@ -74,11 +97,11 @@
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the metrics data."
+          "description": "Unique identifier for the metrics data, typically the user's UID."
         },
-        "userProfileId": {
+        "userId": {
           "type": "string",
-          "description": "Reference to UserProfile. (Relationship: UserProfile 1:N MetricsData)"
+          "description": "The UID of the user who owns these metrics."
         },
         "leadCount": {
           "type": "number",
@@ -95,7 +118,7 @@
       },
       "required": [
         "id",
-        "userProfileId",
+        "userId",
         "leadCount",
         "engagementRate",
         "conversionRate"
@@ -111,9 +134,9 @@
           "type": "string",
           "description": "Unique identifier for the coaching history entry."
         },
-        "userProfileId": {
+        "userId": {
           "type": "string",
-          "description": "Reference to UserProfile. (Relationship: UserProfile 1:N CoachingHistory)"
+          "description": "The UID of the user this history belongs to."
         },
         "timestamp": {
           "type": "string",
@@ -131,7 +154,7 @@
       },
       "required": [
         "id",
-        "userProfileId",
+        "userId",
         "timestamp",
         "advice",
         "completionStatus"
@@ -147,9 +170,9 @@
           "type": "string",
           "description": "Unique identifier for the tool usage log entry."
         },
-        "userProfileId": {
+        "userId": {
           "type": "string",
-          "description": "Reference to UserProfile. (Relationship: UserProfile 1:N ToolUsageLog)"
+          "description": "The UID of the user this log belongs to."
         },
         "toolName": {
           "type": "string",
@@ -167,7 +190,7 @@
       },
       "required": [
         "id",
-        "userProfileId",
+        "userId",
         "toolName",
         "lastUsed",
         "monthlyCost"
@@ -185,31 +208,31 @@
       "schema": {
         "$ref": "#/entities/UserProfile"
       },
-      "description": "Stores user profile information. Each document represents a single user's profile."
+      "description": "Stores user profile information. Each document represents a single user's profile and is keyed by their UID."
     },
-    "/users/{userId}/tasks/{taskId}": {
+    "/tasks/{taskId}": {
       "schema": {
         "$ref": "#/entities/Task"
       },
-      "description": "Stores tasks associated with a specific user profile."
+      "description": "Stores tasks for all users. Documents are indexed by userId for queries."
     },
-    "/users/{userId}/metrics/{metricId}": {
+    "/metrics/{userId}": {
       "schema": {
         "$ref": "#/entities/MetricsData"
       },
-      "description": "Stores metrics data associated with a specific user profile."
+      "description": "Stores metrics for all users. Documents are keyed by user UID."
     },
-    "/users/{userId}/coachingHistory/{historyId}": {
+    "/coachingHistory/{historyId}": {
       "schema": {
         "$ref": "#/entities/CoachingHistory"
       },
-      "description": "Stores coaching history for a specific user profile."
+      "description": "Stores coaching history for all users. Documents are indexed by userId for queries."
     },
-    "/users/{userId}/toolUsageLogs/{logId}": {
+    "/toolUsageLogs/{logId}": {
       "schema": {
         "$ref": "#/entities/ToolUsageLog"
       },
-      "description": "Stores tool usage logs for a specific user profile."
+      "description": "Stores tool usage logs for all users. Documents are indexed by userId for queries."
     }
   }
 }

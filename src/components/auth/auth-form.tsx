@@ -10,10 +10,11 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
   updateProfile,
+  GoogleAuthProvider,
+  User,
 } from 'firebase/auth';
 import { useAuth, useFirestore, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { doc, setDoc } from 'firebase/firestore';
-import { GoogleAuthProvider } from 'firebase/auth';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -64,22 +65,23 @@ export function AuthForm({ mode }: AuthFormProps) {
     },
   });
 
-  const handleUserCreation = async (user: any, name?: string) => {
+  const handleUserCreation = async (user: User, name?: string) => {
     const userDocRef = doc(firestore, 'users', user.uid);
     const userData = {
       uid: user.uid,
       email: user.email,
-      displayName: name || user.displayName || '',
+      displayName: name || user.displayName || user.email,
       onboardingComplete: false,
     };
-    await setDoc(userDocRef, userData, { merge: true }).catch(err => {
+    
+    setDoc(userDocRef, userData, { merge: true }).catch(err => {
         const permissionError = new FirestorePermissionError({
             path: userDocRef.path,
-            operation: 'write',
+            operation: 'create',
             requestResourceData: userData,
         });
         errorEmitter.emit('permission-error', permissionError);
-        throw err;
+        // We don't re-throw here to avoid unhandled promise rejection in this context
     });
   };
 
@@ -109,6 +111,7 @@ export function AuthForm({ mode }: AuthFormProps) {
     setError(null);
     try {
       const result = await signInWithPopup(auth, googleProvider);
+      // Check if user document already exists, if not, create it.
       await handleUserCreation(result.user);
       router.push('/dashboard');
     } catch (err: any) {

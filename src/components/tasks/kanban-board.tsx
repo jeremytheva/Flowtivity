@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, orderBy, doc, updateDoc } from 'firebase/firestore';
 import { Task, TaskStatus, taskStatuses, statusLabels } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,14 +17,20 @@ export function KanbanBoard() {
 
   const tasksQuery = useMemoFirebase(() => {
     if (!user) return null;
-    return query(collection(firestore, 'users', user.uid, 'tasks'), orderBy('createdAt', 'desc'));
+    // Querying the top-level 'tasks' collection
+    return query(
+        collection(firestore, 'tasks'), 
+        where('userId', '==', user.uid), 
+        orderBy('createdAt', 'desc')
+    );
   }, [firestore, user]);
 
   const { data: tasks, isLoading: loading } = useCollection<Task>(tasksQuery);
 
   const handleStatusChange = async (taskId: string, newStatus: TaskStatus) => {
     if (!user) return;
-    const taskRef = doc(firestore, 'users', user.uid, 'tasks', taskId);
+    // Updating doc in top-level 'tasks' collection
+    const taskRef = doc(firestore, 'tasks', taskId);
     await updateDoc(taskRef, { status: newStatus });
   };
 

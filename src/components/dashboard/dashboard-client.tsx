@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { BarChart, Bot, BrainCircuit, Coins, DollarSign, Zap, FileText, ChevronRight } from 'lucide-react';
+import { BarChart, Bot, BrainCircuit, Coins, DollarSign, Zap } from 'lucide-react';
 import { MetricCard } from './metric-card';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useUser, useFirestore, useMemoFirebase, useDoc } from '@/firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { BusinessProfile, DashboardMetrics } from '@/lib/types';
+import { doc } from 'firebase/firestore';
+import { UserProfile, DashboardMetrics } from '@/lib/types';
 import {
   getCoachAdviceAction,
   runFinancialAuditAction,
@@ -18,13 +18,11 @@ import { Skeleton } from '../ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
+import { Loader2 } from 'lucide-react';
 
 export function DashboardClient() {
   const { user } = useUser();
   const firestore = useFirestore();
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
-  const [profile, setProfile] = useState<BusinessProfile | null>(null);
-  const [loading, setLoading] = useState(true);
 
   const [aiResult, setAiResult] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -36,30 +34,20 @@ export function DashboardClient() {
 
   const metricsDocRef = useMemoFirebase(() => {
     if (!user) return null;
-    return doc(firestore, 'users', user.uid, 'metrics', 'data');
+    // Reading from the top-level 'metrics' collection, keyed by user UID
+    return doc(firestore, 'metrics', user.uid);
   }, [firestore, user]);
-  const { data: metricsData, isLoading: metricsLoading } = useDoc<DashboardMetrics>(metricsDocRef);
+  const { data: metrics, isLoading: metricsLoading } = useDoc<DashboardMetrics>(metricsDocRef);
 
   const profileDocRef = useMemoFirebase(() => {
     if (!user) return null;
-    return doc(firestore, 'users', user.uid, 'businessProfile', 'data');
+    // Reading from the top-level 'users' collection
+    return doc(firestore, 'users', user.uid);
   }, [firestore, user]);
-  const { data: profileData, isLoading: profileLoading } = useDoc<BusinessProfile>(profileDocRef);
+  const { data: profile, isLoading: profileLoading } = useDoc<UserProfile>(profileDocRef);
 
 
-  useEffect(() => {
-    if (!metricsLoading) {
-        setMetrics(metricsData || { leadCount: 120, engagementRate: 45, conversionRate: 3.2 });
-    }
-  }, [metricsData, metricsLoading]);
-
-  useEffect(() => {
-      if (!profileLoading) {
-          setProfile(profileData);
-          setLoading(profileLoading);
-      }
-  }, [profileData, profileLoading]);
-
+  const loading = metricsLoading || profileLoading;
 
   const handleAiAction = async (action: 'coach' | 'audit' | 'tech' | 'workflow') => {
     setIsAiRunning(action);
@@ -67,16 +55,16 @@ export function DashboardClient() {
 
     let result;
     if (action === 'coach') {
-        if (!profile) return;
+        if (!profile?.businessName || !metrics) return;
         setModalTitle('Your AI Business Coach');
         setModalDescription('Personalized advice to grow your business.');
-        result = await getCoachAdviceAction(profile.businessName, metrics || { leadCount: 0, engagementRate: 0, conversionRate: 0 }, 'Launched a new ad campaign.');
+        result = await getCoachAdviceAction(profile.businessName, metrics, 'Launched a new ad campaign.');
     } else if (action === 'audit') {
         setModalTitle('Financial Audit Results');
         setModalDescription('Discover savings and forecast future growth.');
         result = await runFinancialAuditAction();
     } else if (action === 'tech') {
-        if (!profile) return;
+        if (!profile?.businessName) return;
         setModalTitle('Tech Stack Recommendation');
         setModalDescription('The best tools to power your business.');
         result = await getTechStackAction(profile.businessName);
@@ -149,7 +137,6 @@ export function DashboardClient() {
         return null;
     };
 
-
   return (
     <div className="space-y-8">
       <div>
@@ -166,9 +153,9 @@ export function DashboardClient() {
             </>
         ) : (
             <>
-                <MetricCard icon={BarChart} title="Lead Count" value={metrics.leadCount.toLocaleString()} />
-                <MetricCard icon={Zap} title="Engagement Rate" value={`${metrics.engagementRate}%`} />
-                <MetricCard icon={Coins} title="Conversion Rate" value={`${metrics.conversionRate}%`} />
+                <MetricCard icon={BarChart} title="Lead Count" value={(metrics.leadCount || 0).toLocaleString()} />
+                <MetricCard icon={Zap} title="Engagement Rate" value={`${metrics.engagementRate || 0}%`} />
+                <MetricCard icon={Coins} title="Conversion Rate" value={`${metrics.conversionRate || 0}%`} />
             </>
         )}
       </div>
@@ -179,7 +166,7 @@ export function DashboardClient() {
           <CardDescription>Leverage AI to make smarter business decisions.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Button onClick={() => handleAiAction('coach')} disabled={!!isAiRunning}>
+          <Button onClick={() => handleAiAction('coach')} disabled={!!isAiRunning || loading}>
             {isAiRunning === 'coach' ? <Loader2 className="animate-spin" /> : <Bot />}
             AI Business Coach
           </Button>
@@ -187,7 +174,7 @@ export function DashboardClient() {
              {isAiRunning === 'audit' ? <Loader2 className="animate-spin" /> : <DollarSign />}
             Run Financial Audit
           </Button>
-           <Button onClick={() => handleAiAction('tech')} disabled={!!isAiRunning}>
+           <Button onClick={() => handleAiAction('tech')} disabled={!!isAiRunning || loading}>
              {isAiRunning === 'tech' ? <Loader2 className="animate-spin" /> : <BrainCircuit />}
             Analyze Tech Stack
           </Button>
