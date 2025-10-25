@@ -5,7 +5,7 @@ import { runFinancialAudit } from '@/ai/flows/run-financial-audit';
 import { generateInitialTechStackRecommendations } from '@/ai/flows/generate-initial-tech-stack-recommendations';
 import { getAuth } from 'firebase/auth';
 import { revalidatePath } from 'next/cache';
-import { initializeFirebase } from '@/firebase';
+import { initializeFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
 
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -62,14 +62,23 @@ export async function addTaskAction(task: { title: string; description?: string;
     
     try {
         const tasksCollectionRef = collection(firestore, 'users', userId, 'tasks');
-        await addDoc(tasksCollectionRef, {
+        const taskData = {
             ...task,
             createdAt: serverTimestamp(),
+        };
+        await addDoc(tasksCollectionRef, taskData).catch(serverError => {
+            const permissionError = new FirestorePermissionError({
+              path: tasksCollectionRef.path,
+              operation: 'create',
+              requestResourceData: taskData,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+            // We don't re-throw here because we want to return a structured error response
         });
         revalidatePath('/tasks');
         return { success: true };
     } catch (error) {
-        console.error('Error adding task:', error);
-        return { success: false, error: 'Failed to add task.' };
+        // This will now primarily catch errors emitted by our handler
+        return { success: false, error: 'Failed to add task due to a permission error.' };
     }
 }

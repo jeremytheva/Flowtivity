@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
 import { doc, setDoc, updateDoc } from 'firebase/firestore';
-import { useFirestore, useUser } from '@/firebase';
+import { useFirestore, useUser, errorEmitter, FirestorePermissionError } from '@/firebase';
 
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -63,26 +63,47 @@ export function OnboardingWizard() {
       return;
     }
     setLoading(true);
-    try {
-      const userDocRef = doc(firestore, 'users', user.uid);
-      await updateDoc(userDocRef, {
+
+    const userDocRef = doc(firestore, 'users', user.uid);
+    const metricsDocRef = doc(firestore, 'users', user.uid, 'metrics', 'data');
+    
+    const profileData = {
         ...data,
         onboardingComplete: true
-      });
-
-      // Also create a default metrics doc
-      await setDoc(doc(firestore, 'users', user.uid, 'metrics', 'data'), {
+    };
+    const metricsData = {
         leadCount: 120,
         engagementRate: 45,
         conversionRate: 3.2,
+    };
+
+    const updateProfilePromise = updateDoc(userDocRef, profileData).catch(error => {
+      const permissionError = new FirestorePermissionError({
+        path: userDocRef.path,
+        operation: 'update',
+        requestResourceData: profileData,
       });
-      
-      toast({ title: 'Profile Created!', description: "You're all set. Welcome aboard!" });
-      router.push('/dashboard');
+      errorEmitter.emit('permission-error', permissionError);
+      throw error; // Re-throw to be caught by Promise.all
+    });
+
+    const setMetricsPromise = setDoc(metricsDocRef, metricsData).catch(error => {
+      const permissionError = new FirestorePermissionError({
+        path: metricsDocRef.path,
+        operation: 'create',
+        requestResourceData: metricsData,
+      });
+      errorEmitter.emit('permission-error', permissionError);
+      throw error; // Re-throw to be caught by Promise.all
+    });
+
+    try {
+        await Promise.all([updateProfilePromise, setMetricsPromise]);
+        toast({ title: 'Profile Created!', description: "You're all set. Welcome aboard!" });
+        router.push('/dashboard');
     } catch (error) {
-      console.error(error);
-      toast({ title: 'Error', description: 'Could not save your profile.', variant: 'destructive' });
-      setLoading(false);
+        toast({ title: 'Error', description: 'Could not save your profile. Check permissions.', variant: 'destructive' });
+        setLoading(false);
     }
   };
 
