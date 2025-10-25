@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 
 export default function OnboardingPage() {
   return (
-    <div className="container mx-auto flex items-center justify-center py-12">
+    <div className="container mx-auto flex items-center justify-center">
       <Card className="w-full max-w-2xl">
         <CardHeader className="text-center">
           <CardTitle className="font-headline text-3xl">Welcome to SoloStrategist OS</CardTitle>
