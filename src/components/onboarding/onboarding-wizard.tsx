@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -50,8 +51,12 @@ export function OnboardingWizard() {
   
   const methods = useForm<z.infer<typeof currentSchema>>({
     resolver: zodResolver(currentSchema),
-    // @ts-ignore
-    defaultValues: wizardData,
+    defaultValues: {
+      businessName: wizardData.businessName || '',
+      industry: wizardData.industry || '',
+      teamSize: wizardData.teamSize,
+      goals: wizardData.goals || [],
+    },
   });
 
   const nextStep = (data: Partial<FormData>) => {
