@@ -1,224 +1,182 @@
 /**
- * @file Firestore Security Rules
- * @description This ruleset enforces a strict user-ownership model for the SoloStrategist OS application.
+ * @fileOverview Firestore Security Rules for SoloStrategist OS.
+ *
+ * Core Philosophy:
+ * This ruleset enforces a strict user-ownership model. Each user can only access their own profile data and associated subcollections.
  *
  * Data Structure:
- * All data is nested under /userProfiles/{userId}, ensuring that each user's data is isolated.
- * - /userProfiles/{userProfileId}: Stores user profile information.
- * - /userProfiles/{userProfileId}/tasks/{taskId}: Stores tasks associated with a user.
- * - /userProfiles/{userProfileId}/metricsData/{metricsDataId}: Stores metrics data for a user.
- * - /userProfiles/{userProfileId}/coachingHistory/{coachingHistoryId}: Stores AI coaching history.
- * - /userProfiles/{userProfileId}/toolUsageLogs/{toolUsageLogId}: Stores tool usage logs for a user.
+ * All data is nested under /users/{userId}. Each user has a profile document and can have multiple tasks, metrics, coaching history entries, and tool usage logs.
  *
  * Key Security Decisions:
- * - User listing is disabled to protect user privacy.
- * - All data access is restricted to the authenticated user who owns the data.
- * - Data validation is relaxed to allow for rapid prototyping. Only critical authorization fields are validated.
+ * - Users can only read and write their own profile data.
+ * - Listing all users is disallowed.
+ * - All subcollections are also user-owned.
  *
  * Denormalization for Authorization:
- * - The data structure is designed to avoid the need for denormalization. All ownership checks are based on path parameters.
+ * - The `userProfileId` field in subcollections is used to ensure that only the owner of the profile can access the subcollection data. This duplicates the `userId` in the path, but avoids needing to perform costly `get()` operations.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Protects user profile documents.
-     * @path /userProfiles/{userProfileId}
+     * @description Secure user profiles. Only the authenticated user can read or write their own profile.
+     * @path /users/{userId}
      * @allow (get) User with ID 'user123' can read their own profile.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user123'
-     * @allow (create) User with ID 'user456' can create their own profile if the ID in the request matches their auth.uid.
-     *    - auth.uid: 'user456'
-     *    - request.resource.data.id: 'user456'
-     * @allow (update) User with ID 'user789' can update their own profile.
-     *    - auth.uid: 'user789'
-     *    - path: '/databases/(default)/documents/userProfiles/user789'
-     * @allow (delete) User with ID 'user901' can delete their own profile.
-     *    - auth.uid: 'user901'
-     *    - path: '/databases/(default)/documents/userProfiles/user901'
-     * @deny (get) User with ID 'user123' cannot read another user's profile (e.g., 'user456').
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user456'
-     * @deny (create) User with ID 'user123' cannot create a profile with an ID that does not match their auth.uid.
-     *    - auth.uid: 'user123'
-     *    - request.resource.data.id: 'user456'
-     * @deny (update) User with ID 'user123' cannot update another user's profile.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user456'
-     * @deny (delete) User with ID 'user123' cannot delete another user's profile.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user456'
+     *   Request: auth.uid = 'user123'
+     * @allow (create) User with ID 'user123' can create their own profile.
+     *   Request: auth.uid = 'user123'
+     * @allow (update) User with ID 'user123' can update their own profile.
+     *   Request: auth.uid = 'user123'
+     * @allow (delete) User with ID 'user123' can delete their own profile.
+     *   Request: auth.uid = 'user123'
+     * @deny (get) User with ID 'user456' cannot read user 'user123' profile.
+     *   Request: auth.uid = 'user456'
+     * @deny (create) User with ID 'user456' cannot create user 'user123' profile.
+     *   Request: auth.uid = 'user456'
+     * @deny (update) User with ID 'user456' cannot update user 'user123' profile.
+     *   Request: auth.uid = 'user456'
+     * @deny (delete) User with ID 'user456' cannot delete user 'user123' profile.
+     *   Request: auth.uid = 'user456'
      * @principle Enforces document ownership for all operations.
      */
-    match /userProfiles/{userProfileId} {
-      allow get: if isOwner(userProfileId);
-      allow list: if false; // User listing is not permitted
-
-      allow create: if isSignedIn() && request.resource.data.id == request.auth.uid;
-      allow update: if isExistingOwner(userProfileId) && request.resource.data.id == resource.data.id; // Enforce immutability of the ID field
-      allow delete: if isExistingOwner(userProfileId);
+    match /users/{userId} {
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) && resource != null;
+      allow delete: if isOwner(userId) && resource != null;
     }
 
     /**
-     * @description Protects task documents under a user profile.
-     * @path /userProfiles/{userProfileId}/tasks/{taskId}
-     * @allow (get) User with ID 'user123' can read their own task.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user123/tasks/task1'
+     * @description Secure tasks under a user profile. Only the authenticated user (owner of the profile) can read or write tasks.
+     * @path /users/{userId}/tasks/{taskId}
+     * @allow (get) User with ID 'user123' can read their own task 'task456'.
+     *   Request: auth.uid = 'user123'
      * @allow (create) User with ID 'user123' can create a task under their profile.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user123/tasks/task2'
-     * @allow (update) User with ID 'user123' can update their own task.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user123/tasks/task1'
-     * @allow (delete) User with ID 'user123' can delete their own task.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user123/tasks/task1'
-     * @deny (get) User with ID 'user123' cannot read another user's task.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user456/tasks/task1'
-     * @deny (create) User with ID 'user123' cannot create a task under another user's profile.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user456/tasks/task2'
-     * @deny (update) User with ID 'user123' cannot update another user's task.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user456/tasks/task1'
-     * @deny (delete) User with ID 'user123' cannot delete another user's task.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user456/tasks/task1'
-     * @principle Enforces path-based ownership.
+     *   Request: auth.uid = 'user123', request.resource.data.userProfileId = 'user123'
+     * @allow (update) User with ID 'user123' can update their own task 'task456'.
+     *   Request: auth.uid = 'user123', resource.data.userProfileId = 'user123'
+     * @allow (delete) User with ID 'user123' can delete their own task 'task456'.
+     *   Request: auth.uid = 'user123', resource.data.userProfileId = 'user123'
+     * @deny (get) User with ID 'user456' cannot read task 'task456' under user 'user123'.
+     *   Request: auth.uid = 'user456'
+     * @deny (create) User with ID 'user456' cannot create a task under user 'user123'.
+     *   Request: auth.uid = 'user456', request.resource.data.userProfileId = 'user123'
+     * @deny (update) User with ID 'user456' cannot update task 'task456' under user 'user123'.
+     *   Request: auth.uid = 'user456', resource.data.userProfileId = 'user123'
+     * @deny (delete) User with ID 'user456' cannot delete task 'task456' under user 'user123'.
+     *   Request: auth.uid = 'user456', resource.data.userProfileId = 'user123'
+     * @principle Enforces document ownership and validates the userProfileId on write.
      */
-    match /userProfiles/{userProfileId}/tasks/{taskId} {
-      allow get: if isOwner(userProfileId);
-      allow list: if isOwner(userProfileId);
-      allow create: if isOwner(userProfileId);
-      allow update: if isExistingOwner(userProfileId);
-      allow delete: if isExistingOwner(userProfileId);
+    match /users/{userId}/tasks/{taskId} {
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.userProfileId == userId;
+      allow update: if isOwner(userId) && resource.data.userProfileId == userId && resource != null;
+      allow delete: if isOwner(userId) && resource.data.userProfileId == userId && resource != null;
     }
 
     /**
-     * @description Protects metrics data documents under a user profile.
-     * @path /userProfiles/{userProfileId}/metricsData/{metricsDataId}
-     * @allow (get) User with ID 'user123' can read their own metrics data.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user123/metricsData/metrics1'
+     * @description Secure metrics data under a user profile. Only the authenticated user (owner of the profile) can read or write metrics data.
+     * @path /users/{userId}/metrics/{metricId}
+     * @allow (get) User with ID 'user123' can read their own metrics 'metric456'.
+     *   Request: auth.uid = 'user123'
      * @allow (create) User with ID 'user123' can create metrics data under their profile.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user123/metricsData/metrics2'
-     * @allow (update) User with ID 'user123' can update their own metrics data.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user123/metricsData/metrics1'
-     * @allow (delete) User with ID 'user123' can delete their own metrics data.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user123/metricsData/metrics1'
-     * @deny (get) User with ID 'user123' cannot read another user's metrics data.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user456/metricsData/metrics1'
-     * @deny (create) User with ID 'user123' cannot create metrics data under another user's profile.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user456/metricsData/metrics2'
-     * @deny (update) User with ID 'user123' cannot update another user's metrics data.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user456/metricsData/metrics1'
-     * @deny (delete) User with ID 'user123' cannot delete another user's metrics data.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user456/metricsData/metrics1'
-     * @principle Enforces path-based ownership.
+     *   Request: auth.uid = 'user123', request.resource.data.userProfileId = 'user123'
+     * @allow (update) User with ID 'user123' can update their own metrics 'metric456'.
+     *   Request: auth.uid = 'user123', resource.data.userProfileId = 'user123'
+     * @allow (delete) User with ID 'user123' can delete their own metrics 'metric456'.
+     *   Request: auth.uid = 'user123', resource.data.userProfileId = 'user123'
+     * @deny (get) User with ID 'user456' cannot read metrics 'metric456' under user 'user123'.
+     *   Request: auth.uid = 'user456'
+     * @deny (create) User with ID 'user456' cannot create metrics data under user 'user123'.
+     *   Request: auth.uid = 'user456', request.resource.data.userProfileId = 'user123'
+     * @deny (update) User with ID 'user456' cannot update metrics 'metric456' under user 'user123'.
+     *   Request: auth.uid = 'user456', resource.data.userProfileId = 'user123'
+     * @deny (delete) User with ID 'user456' cannot delete metrics 'metric456' under user 'user123'.
+     *   Request: auth.uid = 'user456', resource.data.userProfileId = 'user123'
+     * @principle Enforces document ownership and validates the userProfileId on write.
      */
-    match /userProfiles/{userProfileId}/metricsData/{metricsDataId} {
-      allow get: if isOwner(userProfileId);
-      allow list: if isOwner(userProfileId);
-      allow create: if isOwner(userProfileId);
-      allow update: if isExistingOwner(userProfileId);
-      allow delete: if isExistingOwner(userProfileId);
+    match /users/{userId}/metrics/{metricId} {
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.userProfileId == userId;
+      allow update: if isOwner(userId) && resource.data.userProfileId == userId && resource != null;
+      allow delete: if isOwner(userId) && resource.data.userProfileId == userId && resource != null;
     }
 
     /**
-     * @description Protects coaching history documents under a user profile.
-     * @path /userProfiles/{userProfileId}/coachingHistory/{coachingHistoryId}
-     * @allow (get) User with ID 'user123' can read their own coaching history.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user123/coachingHistory/coach1'
+     * @description Secure coaching history under a user profile. Only the authenticated user (owner of the profile) can read or write coaching history.
+     * @path /users/{userId}/coachingHistory/{historyId}
+     * @allow (get) User with ID 'user123' can read their own history 'history456'.
+     *   Request: auth.uid = 'user123'
      * @allow (create) User with ID 'user123' can create coaching history under their profile.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user123/coachingHistory/coach2'
-     * @allow (update) User with ID 'user123' can update their own coaching history.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user123/coachingHistory/coach1'
-     * @allow (delete) User with ID 'user123' can delete their own coaching history.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user123/coachingHistory/coach1'
-     * @deny (get) User with ID 'user123' cannot read another user's coaching history.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user456/coachingHistory/coach1'
-     * @deny (create) User with ID 'user123' cannot create coaching history under another user's profile.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user456/coachingHistory/coach2'
-     * @deny (update) User with ID 'user123' cannot update another user's coaching history.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user456/coachingHistory/coach1'
-     * @deny (delete) User with ID 'user123' cannot delete another user's coaching history.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user456/coachingHistory/coach1'
-     * @principle Enforces path-based ownership.
+     *   Request: auth.uid = 'user123', request.resource.data.userProfileId = 'user123'
+     * @allow (update) User with ID 'user123' can update their own history 'history456'.
+     *   Request: auth.uid = 'user123', resource.data.userProfileId = 'user123'
+     * @allow (delete) User with ID 'user123' can delete their own history 'history456'.
+     *   Request: auth.uid = 'user123', resource.data.userProfileId = 'user123'
+     * @deny (get) User with ID 'user456' cannot read history 'history456' under user 'user123'.
+     *   Request: auth.uid = 'user456'
+     * @deny (create) User with ID 'user456' cannot create coaching history under user 'user123'.
+     *   Request: auth.uid = 'user456', request.resource.data.userProfileId = 'user123'
+     * @deny (update) User with ID 'user456' cannot update history 'history456' under user 'user123'.
+     *   Request: auth.uid = 'user456', resource.data.userProfileId = 'user123'
+     * @deny (delete) User with ID 'user456' cannot delete history 'history456' under user 'user123'.
+     *   Request: auth.uid = 'user456', resource.data.userProfileId = 'user123'
+     * @principle Enforces document ownership and validates the userProfileId on write.
      */
-    match /userProfiles/{userProfileId}/coachingHistory/{coachingHistoryId} {
-      allow get: if isOwner(userProfileId);
-      allow list: if isOwner(userProfileId);
-      allow create: if isOwner(userProfileId);
-      allow update: if isExistingOwner(userProfileId);
-      allow delete: if isExistingOwner(userProfileId);
+    match /users/{userId}/coachingHistory/{historyId} {
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.userProfileId == userId;
+      allow update: if isOwner(userId) && resource.data.userProfileId == userId && resource != null;
+      allow delete: if isOwner(userId) && resource.data.userProfileId == userId && resource != null;
     }
 
     /**
-     * @description Protects tool usage log documents under a user profile.
-     * @path /userProfiles/{userProfileId}/toolUsageLogs/{toolUsageLogId}
-     * @allow (get) User with ID 'user123' can read their own tool usage log.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user123/toolUsageLogs/tool1'
-     * @allow (create) User with ID 'user123' can create tool usage log under their profile.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user123/toolUsageLogs/tool2'
-     * @allow (update) User with ID 'user123' can update their own tool usage log.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user123/toolUsageLogs/tool1'
-     * @allow (delete) User with ID 'user123' can delete their own tool usage log.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user123/toolUsageLogs/tool1'
-     * @deny (get) User with ID 'user123' cannot read another user's tool usage log.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user456/toolUsageLogs/tool1'
-     * @deny (create) User with ID 'user123' cannot create tool usage log under another user's profile.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user456/toolUsageLogs/tool2'
-     * @deny (update) User with ID 'user123' cannot update another user's tool usage log.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user456/toolUsageLogs/tool1'
-     * @deny (delete) User with ID 'user123' cannot delete another user's tool usage log.
-     *    - auth.uid: 'user123'
-     *    - path: '/databases/(default)/documents/userProfiles/user456/toolUsageLogs/tool1'
-     * @principle Enforces path-based ownership.
+     * @description Secure tool usage logs under a user profile. Only the authenticated user (owner of the profile) can read or write tool usage logs.
+     * @path /users/{userId}/toolUsageLogs/{logId}
+     * @allow (get) User with ID 'user123' can read their own log 'log456'.
+     *   Request: auth.uid = 'user123'
+     * @allow (create) User with ID 'user123' can create tool usage logs under their profile.
+     *   Request: auth.uid = 'user123', request.resource.data.userProfileId = 'user123'
+     * @allow (update) User with ID 'user123' can update their own log 'log456'.
+     *   Request: auth.uid = 'user123', resource.data.userProfileId = 'user123'
+     * @allow (delete) User with ID 'user123' can delete their own log 'log456'.
+     *   Request: auth.uid = 'user123', resource.data.userProfileId = 'user123'
+     * @deny (get) User with ID 'user456' cannot read log 'log456' under user 'user123'.
+     *   Request: auth.uid = 'user456'
+     * @deny (create) User with ID 'user456' cannot create tool usage logs under user 'user123'.
+     *   Request: auth.uid = 'user456', request.resource.data.userProfileId = 'user123'
+     * @deny (update) User with ID 'user456' cannot update log 'log456' under user 'user123'.
+     *   Request: auth.uid = 'user456', resource.data.userProfileId = 'user123'
+     * @deny (delete) User with ID 'user456' cannot delete log 'log456' under user 'user123'.
+     *   Request: auth.uid = 'user456', resource.data.userProfileId = 'user123'
+     * @principle Enforces document ownership and validates the userProfileId on write.
      */
-    match /userProfiles/{userProfileId}/toolUsageLogs/{toolUsageLogId} {
-      allow get: if isOwner(userProfileId);
-      allow list: if isOwner(userProfileId);
-      allow create: if isOwner(userProfileId);
-      allow update: if isExistingOwner(userProfileId);
-      allow delete: if isExistingOwner(userProfileId);
+    match /users/{userId}/toolUsageLogs/{logId} {
+      function isOwner(userId) {
+        return request.auth != null && request.auth.uid == userId;
+      }
+      allow get: if isOwner(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.userProfileId == userId;
+      allow update: if isOwner(userId) && resource.data.userProfileId == userId && resource != null;
+      allow delete: if isOwner(userId) && resource.data.userProfileId == userId && resource != null;
     }
-  }
-
-  // Helper functions
-  function isSignedIn() {
-    return request.auth != null;
-  }
-
-  function isOwner(userId) {
-    return request.auth.uid == userId;
-  }
-
-  function isExistingOwner(userId) {
-    return isOwner(userId) && resource != null;
   }
 }
