@@ -2,135 +2,152 @@
  * @fileoverview Firestore Security Rules for SoloStrategist OS.
  *
  * Core Philosophy:
- * This ruleset enforces a strict user-ownership model for most data,
- * ensuring that only authenticated users can access their own data.
+ * This ruleset enforces a strict user-ownership model, where users can only
+ * read and write their own data, with the exception of public read access for
+ * certain collections.
  *
  * Data Structure:
- * - /users/{userId}: Stores user profile information, keyed by UID.
- * - /tasks/{taskId}: Stores tasks for all users; documents contain a userId field.
- * - /metrics/{userId}: Stores metrics, keyed by UID.
- * - /coachingHistory/{historyId}: Stores coaching history; documents contain a userId field.
- * - /toolUsageLogs/{logId}: Stores tool usage logs; documents contain a userId field.
+ * - User profiles are stored under /users/{userId}, with each document keyed
+ *   by the user's UID.
+ * - Tasks are stored under /tasks/{taskId}. Each task contains a userId
+ *   field indicating the owner.
+ * - Metrics data are stored under /metrics/{userId}. Each metric document contains a userId
+ *   field indicating the owner.
+ * - Coaching history is stored under /coachingHistory/{historyId}. Each document contains a userId
+ *   field indicating the owner.
+ * - Tool usage logs are stored under /toolUsageLogs/{logId}. Each document contains a userId
+ *   field indicating the owner.
  *
  * Key Security Decisions:
- * - Users can only read and write their own profile data in /users/{userId}.
- * - Tasks, metrics, coaching history, and tool usage logs are secured by requiring the userId
- *   field in the document to match the authenticated user's UID.
- * - No user listing is allowed for any collections.
+ * - Users can only create, update, and delete their own user profile.
+ * - Listing of users is not allowed.
+ * - Public read access is enabled for the tasks, metrics, coachingHistory and toolUsageLogs collections.
+ * - All write operations are restricted to the owner of the document, based on the userId field.
  *
  * Denormalization for Authorization:
- * - Tasks, metrics, coaching history, and tool usage logs include a `userId` field to
- *   simplify authorization checks and avoid expensive `get()` calls.
+ * - The 'Task', 'MetricsData', 'CoachingHistory', and 'ToolUsageLog' entities include a 'userId' field,
+ *   which is used to enforce ownership for write operations. This avoids the need
+ *   for complex queries or additional reads to determine ownership.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * @description Allows users to read and write their own profile data.
+     * @description Rules for user profiles.
      * @path /users/{userId}
-     * @allow (create, update, get) User with UID 'user123' can create/update/get their profile at /users/user123.
-     * @deny (create, update, get) User with UID 'user456' cannot create/update/get profile at /users/user123.
-     * @principle Enforces document ownership for writes and reads.
+     * @allow (read) Authenticated user can read their own profile.
+     * @allow (create) Authenticated user can create their own profile if the userId matches their auth.uid.
+     * @allow (update) Authenticated user can update their own profile if the userId matches their auth.uid.
+     * @deny (delete) No one can delete a user profile.
+     * @principle Enforces document ownership for writes and restricts access to a user's own data tree.
      */
     match /users/{userId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      function isOwner(userId) {
-        return request.auth.uid == userId;
-      }
-
+      // Only signed-in users can read user profiles.
       allow get: if isSignedIn() && isOwner(userId);
+      // No listing of user documents.
       allow list: if false;
+      // Only signed-in users can create their own profile, and the userId must match their auth UID.
       allow create: if isSignedIn() && isOwner(userId);
-      allow update: if isSignedIn() && isOwner(userId);
-      allow delete: if isSignedIn() && isOwner(userId);
+      // Only the user can update their own profile, and the userId must match their auth UID.
+      allow update: if isSignedIn() && isExistingOwner(userId);
+      // No one can delete a user profile.
+      allow delete: if false;
     }
 
     /**
-     * @description Allows users to read and write tasks where they are the owner.
+     * @description Rules for tasks.
      * @path /tasks/{taskId}
-     * @allow (create) User with UID 'user123' can create a task at /tasks/task456 if task.userId == 'user123'.
-     * @allow (get, update, delete) User with UID 'user123' can read/update/delete a task at /tasks/task456 if task.userId == 'user123'.
-     * @deny (create) User with UID 'user456' cannot create a task at /tasks/task456 with task.userId == 'user123'.
-     * @deny (get, update, delete) User with UID 'user456' cannot read/update/delete a task at /tasks/task456 if task.userId == 'user123'.
-     * @principle Enforces document ownership based on the userId field.
+     * @allow (get, list) Any user can read any task.
+     * @allow (create) Only an authenticated user can create a task, and the userId in the task must match their auth.uid.
+     * @allow (update) Only the owner of the task can update it.
+     * @allow (delete) Only the owner of the task can delete it.
+     * @principle Allows public reads, but restricts writes to the owner of the document.
      */
     match /tasks/{taskId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow list: if false;
+      // Anyone can read tasks.
+      allow get, list: if true;
+      // Only signed-in users can create tasks, and the userId in the task must match their auth UID.
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      // Only the owner can update the task, and the task must exist.
+      allow update: if isSignedIn() && isExistingOwner(resource.data.userId);
+      // Only the owner can delete the task, and the task must exist.
+      allow delete: if isSignedIn() && isExistingOwner(resource.data.userId);
     }
 
-    /**
-     * @description Allows users to read and write metrics data where they are the owner.
-     * @path /metrics/{metricsId}
-     * @allow (create) User with UID 'user123' can create metrics data at /metrics/user123 if request.resource.data.userId == 'user123'.
-     * @allow (get, update, delete) User with UID 'user123' can read/update/delete metrics data at /metrics/user123 if the existing document's userId == 'user123'.
-     * @deny (create) User with UID 'user456' cannot create metrics data at /metrics/user123 with request.resource.data.userId == 'user123'.
-     * @deny (get, update, delete) User with UID 'user456' cannot read/update/delete metrics data at /metrics/user123 if the existing document's userId == 'user123'.
-     * @principle Enforces document ownership based on the userId field.
+        /**
+     * @description Rules for metrics data.
+     * @path /metrics/{metricId}
+     * @allow (get, list) Any user can read any metrics data.
+     * @allow (create) Only an authenticated user can create metrics data, and the userId in the document must match their auth.uid.
+     * @allow (update) Only the owner of the metrics data can update it.
+     * @allow (delete) Only the owner of the metrics data can delete it.
+     * @principle Allows public reads, but restricts writes to the owner of the document.
      */
-    match /metrics/{metricsId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow list: if false;
+    match /metrics/{metricId} {
+      // Anyone can read metrics.
+      allow get, list: if true;
+      // Only signed-in users can create metrics, and the userId in the document must match their auth UID.
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      // Only the owner can update the metrics, and the metrics data must exist.
+      allow update: if isSignedIn() && isExistingOwner(resource.data.userId);
+      // Only the owner can delete the metrics, and the metrics data must exist.
+      allow delete: if isSignedIn() && isExistingOwner(resource.data.userId);
     }
 
     /**
-     * @description Allows users to read and write coaching history where they are the owner.
+     * @description Rules for coaching history.
      * @path /coachingHistory/{historyId}
-     * @allow (create) User with UID 'user123' can create coaching history at /coachingHistory/history456 if request.resource.data.userId == 'user123'.
-     * @allow (get, update, delete) User with UID 'user123' can read/update/delete coaching history at /coachingHistory/history456 if the existing document's userId == 'user123'.
-     * @deny (create) User with UID 'user456' cannot create coaching history at /coachingHistory/history456 with request.resource.data.userId == 'user123'.
-     * @deny (get, update, delete) User with UID 'user456' cannot read/update/delete coaching history at /coachingHistory/history456 if the existing document's userId == 'user123'.
-     * @principle Enforces document ownership based on the userId field.
+     * @allow (get, list) Any user can read any coaching history.
+     * @allow (create) Only an authenticated user can create a coaching history entry, and the userId in the document must match their auth.uid.
+     * @allow (update) Only the owner of the coaching history entry can update it.
+     * @allow (delete) Only the owner of the coaching history entry can delete it.
+     * @principle Allows public reads, but restricts writes to the owner of the document.
      */
     match /coachingHistory/{historyId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow list: if false;
+      // Anyone can read coaching history.
+      allow get, list: if true;
+      // Only signed-in users can create coaching history, and the userId in the document must match their auth UID.
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      // Only the owner can update the coaching history, and the history entry must exist.
+      allow update: if isSignedIn() && isExistingOwner(resource.data.userId);
+      // Only the owner can delete the coaching history, and the history entry must exist.
+      allow delete: if isSignedIn() && isExistingOwner(resource.data.userId);
     }
 
-    /**
-     * @description Allows users to read and write tool usage logs where they are the owner.
+   /**
+     * @description Rules for tool usage logs.
      * @path /toolUsageLogs/{logId}
-     * @allow (create) User with UID 'user123' can create a tool usage log at /toolUsageLogs/log456 if request.resource.data.userId == 'user123'.
-     * @allow (get, update, delete) User with UID 'user123' can read/update/delete a tool usage log at /toolUsageLogs/log456 if the existing document's userId == 'user123'.
-     * @deny (create) User with UID 'user456' cannot create a tool usage log at /toolUsageLogs/log456 with request.resource.data.userId == 'user123'.
-     * @deny (get, update, delete) User with UID 'user456' cannot read/update/delete a tool usage log at /toolUsageLogs/log456 if the existing document's userId == 'user123'.
-     * @principle Enforces document ownership based on the userId field.
+     * @allow (get, list) Any user can read any tool usage logs.
+     * @allow (create) Only an authenticated user can create a tool usage log entry, and the userId in the document must match their auth.uid.
+     * @allow (update) Only the owner of the tool usage log entry can update it.
+     * @allow (delete) Only the owner of the tool usage log entry can delete it.
+     * @principle Allows public reads, but restricts writes to the owner of the document.
      */
     match /toolUsageLogs/{logId} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
-
-      allow get: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow list: if false;
+      // Anyone can read tool usage logs.
+      allow get, list: if true;
+      // Only signed-in users can create tool usage logs, and the userId in the document must match their auth UID.
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      // Only the owner can update the tool usage logs, and the log entry must exist.
+      allow update: if isSignedIn() && isExistingOwner(resource.data.userId);
+      // Only the owner can delete the tool usage logs, and the log entry must exist.
+      allow delete: if isSignedIn() && isExistingOwner(resource.data.userId);
     }
+  }
+
+  // Helper function to determine if the user is signed in.
+  function isSignedIn() {
+    return request.auth != null;
+  }
+
+  // Helper function to determine if the user is the owner of the document.
+  function isOwner(userId) {
+    return request.auth.uid == userId;
+  }
+
+  // Helper function to determine if the user is the owner of the existing document.
+  function isExistingOwner(userId) {
+      return isSignedIn() && isOwner(userId) && resource != null;
   }
 }
