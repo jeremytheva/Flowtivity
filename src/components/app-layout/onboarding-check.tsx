@@ -42,11 +42,18 @@ export function OnboardingCheck({ children }: { children: ReactNode }) {
   }, [user, userProfile, isChecking, router, pathname]);
 
   if (isChecking) {
-    return (
-      <div className="flex h-[calc(100vh-8rem)] w-full items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    // If checking on a page OTHER than onboarding, show a full-page loader
+    // to hide the content before the redirect happens.
+    if (!pathname.startsWith('/onboarding')) {
+      return (
+        <div className="flex h-[calc(100vh-8rem)] w-full items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      );
+    }
+    // If we are on the onboarding page itself, don't render a big loader.
+    // Let the page content render normally.
+    return null;
   }
 
   // Once loading is complete, render children only if the user is onboarded
