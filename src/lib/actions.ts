@@ -7,12 +7,19 @@ import { revalidatePath } from 'next/cache';
 import { initializeFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
 
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import type { GetAICoachAdviceOutput } from '@/ai/flows/get-ai-coach-advice';
+import type { FinancialAuditOutput } from '@/ai/flows/run-financial-audit';
+import type { GenerateInitialTechStackRecommendationsOutput } from '@/ai/flows/generate-initial-tech-stack-recommendations';
+
+type ActionSuccess<T> = { success: true; data: T };
+type ActionFailure = { success: false; error: string };
+type ActionResult<T> = ActionSuccess<T> | ActionFailure;
 
 export async function getCoachAdviceAction(
   businessDescription: string,
   metrics: { leadCount: number; engagementRate: number; conversionRate: number },
   recentActions: string,
-) {
+): Promise<ActionResult<GetAICoachAdviceOutput>> {
   try {
     const advice = await getAICoachAdvice({
       businessDescription,
@@ -26,7 +33,7 @@ export async function getCoachAdviceAction(
   }
 }
 
-export async function runFinancialAuditAction() {
+export async function runFinancialAuditAction(): Promise<ActionResult<FinancialAuditOutput>> {
   try {
     const auditResults = await runFinancialAudit();
     return { success: true, data: auditResults };
@@ -36,7 +43,9 @@ export async function runFinancialAuditAction() {
   }
 }
 
-export async function getTechStackAction(businessDescription: string) {
+export async function getTechStackAction(
+  businessDescription: string
+): Promise<ActionResult<GenerateInitialTechStackRecommendationsOutput>> {
   try {
     const recommendations = await generateInitialTechStackRecommendations({ businessDescription });
     return { success: true, data: recommendations };
@@ -70,15 +79,24 @@ export async function addTaskAction(task: { title: string; description?: string;
         await addDoc(tasksCollectionRef, taskData);
         revalidatePath('/tasks');
         return { success: true };
-    } catch (error: any) {
-        // This will now primarily catch errors emitted by our handler
-        // The error is generic here because we cannot easily import the FirestorePermissionError on the server
-        const permissionError = new FirestorePermissionError({
-          path: tasksCollectionRef.path,
-          operation: 'create',
-          requestResourceData: taskData,
-        });
-        errorEmitter.emit('permission-error', permissionError);
-        return { success: false, error: 'Failed to add task due to a permission error.' };
+    } catch (error: unknown) {
+        console.error('Error adding task:', error);
+
+        const errorCode =
+          typeof error === 'object' && error !== null && 'code' in error
+            ? (error as { code?: string }).code
+            : undefined;
+
+        if (errorCode === 'permission-denied') {
+            const permissionError = new FirestorePermissionError({
+              path: tasksCollectionRef.path,
+              operation: 'create',
+              requestResourceData: taskData,
+            });
+            errorEmitter.emit('permission-error', permissionError);
+            return { success: false, error: 'Failed to add task due to a permission error.' };
+        }
+
+        return { success: false, error: 'Failed to add task. Please try again.' };
     }
 }
